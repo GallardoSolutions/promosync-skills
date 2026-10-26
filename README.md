@@ -13,6 +13,24 @@ In Claude Code:
 
 Then open any Shopify theme and ask things like "add volume pricing to the product page" or "price the decorations in the cart". The skill is available as `/promosync:theme-integration`.
 
+## Recommended companion: Shopify Dev MCP
+
+This skill knows PromoSync. It does not know every Liquid filter, section schema, or GraphQL field, and it cannot check your code against Shopify. Pair it with Shopify's own tooling so the agent can look up platform docs and validate the Liquid and GraphQL it writes before you ship it.
+
+Easiest route, Shopify's official plugin (bundles the skills and the Dev MCP server):
+
+```
+/plugin install shopify-ai-toolkit@claude-plugins-official
+```
+
+Or add just the Dev MCP server:
+
+```
+claude mcp add shopify-dev-mcp -s user -- npx -y @shopify/dev-mcp@latest
+```
+
+Either way the PromoSync skill hands Shopify-platform questions to the Shopify tooling and keeps the PromoSync-specific parts (metafield shapes, pricing rules, block behavior) for itself. Finish with `shopify theme check` on the theme. Details at [shopify.dev/docs/apps/build/ai-toolkit](https://shopify.dev/docs/apps/build/ai-toolkit).
+
 ## Update
 
 Third-party marketplaces do not auto-update by default. Pull the latest catalog with:
