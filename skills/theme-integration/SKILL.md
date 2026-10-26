@@ -1,6 +1,6 @@
 ---
 name: theme-integration
-description: Expert on PromoSync app integration with Shopify themes. Use when building, editing, or designing any part of a theme that reads/writes PromoSync metafields, embeds PromoSync theme app blocks (tier pricing, decorations, minimum quantity), or coordinates with Shopify MCP / design tools (nano banana pro) to produce PromoSync-aware store UX.
+description: Expert on PromoSync app integration with Shopify themes. Use when building, editing, or designing any part of a theme that reads/writes PromoSync metafields, embeds PromoSync theme app blocks (tier pricing, decorations, minimum quantity), or coordinates with Shopify MCP / design tools (nano banana pro) to produce PromoSync-aware store UX. Also use when a distributor is starting a Shopify store or theme from scratch, choosing a theme for promotional products, setting up Shopify CLI, or putting theme code under version control with GitHub.
 ---
 
 # PromoSync Expert
@@ -22,6 +22,7 @@ Activate this skill when the user is doing any of the following:
 - Coordinating with design tools (nano banana pro, Figma, etc.) to produce mockups for PromoSync-driven UI
 - Migrating off of Bold PRE or another tier-pricing app onto PromoSync
 - Debugging why PromoSync data isn't showing on the storefront
+- Starting a new store or theme, choosing between Trade, Dawn, Horizon, or a paid theme, setting up Shopify CLI, or connecting the theme to GitHub (see `theme-workflow.md`)
 
 ## How to use this skill
 
@@ -33,6 +34,7 @@ The skill is organized into reference files. **Read the files you need** — don
 | `decoration-pricing.md` | When you need to **price** a decorated product — setup fee, run charge, extra-color/extra-location surcharges, PMS match — from the enriched `location_decorations` metafield + canonical decoration products. The headline reference for v3 decoration pricing. |
 | `theme-blocks.md` | When adding, configuring, or customizing a PromoSync theme app block. Covers the 6 blocks + the Shopify Function. |
 | `integration-patterns.md` | When writing Liquid or JS that reads PromoSync metafields — ready-to-adapt snippets for product page, cart, cart drawer, cart footer, JS variant switching. |
+| `theme-workflow.md` | When the user is new to Shopify theme work: which theme to start from for promotional products, the order to set up a store, the Shopify CLI development loop, and keeping theme code in GitHub. Read it before any work on a store that does not yet have a theme or a repo. |
 | `design-coordination.md` | When coordinating with Shopify MCP and design tools (nano banana pro) to produce designs or briefs. Covers the workflow, what to send the design tool, and how to turn mockups back into Liquid. |
 
 **Rule of thumb:** for any non-trivial task, open `metafields.md` first (to confirm the data shape), then `integration-patterns.md` or `theme-blocks.md` (to pick the right approach).

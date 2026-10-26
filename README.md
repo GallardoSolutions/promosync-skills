@@ -11,7 +11,7 @@ In Claude Code:
 /plugin install promosync@psrestful
 ```
 
-Then open any Shopify theme and ask things like "add volume pricing to the product page" or "price the decorations in the cart". The skill is available as `/promosync:theme-integration`.
+Then open any Shopify theme and ask things like "which theme should I start from", "set up GitHub for this theme", "add volume pricing to the product page" or "price the decorations in the cart". The skill is available as `/promosync:theme-integration`.
 
 ## Recommended companion: Shopify Dev MCP
 
@@ -55,6 +55,7 @@ or turn on auto-update for the `psrestful` marketplace in the `/plugin` menu.
 | `theme-blocks.md` | The theme app blocks and the volume-pricing Shopify Function |
 | `integration-patterns.md` | Liquid and JS snippets for product page, cart, and variant switching |
 | `decoration-pricing.md` | Pricing decorations from the enriched `location_decorations` metafield |
+| `theme-workflow.md` | Choosing a theme for promotional products, setting up the store, Shopify CLI, and GitHub version control |
 | `design-coordination.md` | Working with Shopify MCP and design tools on PromoSync UI |
 
 Questions or gaps: https://promosync-docs.psrestful.com or support from PSRESTful.
