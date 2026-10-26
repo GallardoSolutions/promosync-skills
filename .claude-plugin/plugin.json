@@ -1,0 +1,17 @@
+{
+  "name": "promosync",
+  "description": "Build Shopify themes on PromoSync data: metafields, theme app blocks, tier pricing, decorations, minimum quantities.",
+  "author": {
+    "name": "PSRESTful"
+  },
+  "homepage": "https://promosync-docs.psrestful.com",
+  "repository": "https://github.com/GallardoSolutions/promosync-skills",
+  "keywords": [
+    "promosync",
+    "psrestful",
+    "shopify",
+    "liquid",
+    "metafields",
+    "promotional-products"
+  ]
+}

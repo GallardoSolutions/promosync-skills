@@ -1,0 +1,28 @@
+{
+  "name": "psrestful",
+  "owner": {
+    "name": "PSRESTful"
+  },
+  "metadata": {
+    "description": "PSRESTful skills for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "promosync",
+      "source": "./",
+      "description": "Build Shopify themes on PromoSync data: metafields, theme app blocks, tier pricing, decorations, minimum quantities.",
+      "author": {
+        "name": "PSRESTful"
+      },
+      "homepage": "https://promosync-docs.psrestful.com",
+      "keywords": [
+        "promosync",
+        "psrestful",
+        "shopify",
+        "liquid",
+        "metafields",
+        "promotional-products"
+      ]
+    }
+  ]
+}
