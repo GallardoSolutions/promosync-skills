@@ -36,6 +36,7 @@ Source of truth: the metafield definitions registered by the PromoSync app.
 | `minimum_quantity` | `number_integer` | Minimum order qty for the default configuration (decorated when `default_configuration_type='Decorated'`, blank otherwise) | `5`, `25`, `100` |
 | `blank_minimum_quantity` | `number_integer` | **Gated.** Minimum order qty for the *blank* (undecorated) configuration. Only emitted when `Shop.emit_blank_sample_metafields == true`. | `1`, `6`, `12` |
 | `lead_time` | `number_integer` | Lead time in days | `14` |
+| `msrp_min` | `number_decimal` | **Gated, opt-in.** Lowest `psrestful.msrp` across the product's variants, for product cards and smart-collection rules. Same gating as `msrp`. See "MSRP" below. | `"12.50"` |
 | `is_on_demand` | `boolean` | On-demand product | `"true"` / `"false"` |
 | `is_rush_service` | `boolean` | Rush service available | `"true"` / `"false"` |
 | `imprint_size` | `single_line_text_field` | Imprint area size | `"1.5\" x 1.5\""` |
@@ -270,6 +271,7 @@ Only present when `Shop.enable_google_merchant=true`.
 | `part_price_array` | `json` | Volume/tier pricing for the default configuration (decorated when `default_configuration_type='Decorated'`, blank otherwise) | See shape below |
 | `blank_part_price_array` | `json` | **Gated.** Same shape as `part_price_array`, but blank (no-decoration) prices. Only emitted when `Shop.emit_blank_sample_metafields == true`. Always *additive* to `part_price_array` — both are present on shops that emit it, never overlap. | Same shape as `part_price_array` |
 | `sample_price` | `number_integer` | **Gated.** Single-unit blank price **in cents**. Only emitted when `blank_part_price_array` has a tier with `quantityMin == 1` (i.e. the supplier actually offers qty-1 blank). When absent, the merchant cannot fulfill a single-unit sample — do not infer or fabricate a price. | `1500` (=$15.00) |
+| `msrp` | `number_decimal` | **Gated, opt-in.** Supplier list price (MSRP) at the part's lowest-quantity tier, in currency units (dollars), not cents. Only on shops with "Save MSRP Metafields" on; absent when the supplier publishes no list price. See "MSRP" below. | `"12.50"` |
 | `dimension` | `json` | Width/height/depth/weight + UOMs. Display only; see "Shipping weight" below | `{"dimensionUom": "IN", "width": "3.5", ...}` |
 | `apparel_size` | `json` | Style, label size, custom size | See PSRESTful ApparelSize object |
 | `specification_array` | `json` | Product specs (length, chest, etc.) | Array of objects |
@@ -277,6 +279,41 @@ Only present when `Shop.enable_google_merchant=true`.
 | `shipping_package_array` | `json` | Carton / case-pack configurations (units per carton, gross weight, box dimensions). PromoSync also derives the variant's shipping weight from it; see "Shipping weight" below | Array of objects |
 | `color_array` | `json` | Available colors with hex codes, dumped from PromoStandards `ColorArray`. **Separate from color swatches** — this is raw per-variant color data, *not* the swatch mechanism (swatches = option-linked `custom-color-swatch` metaobjects; see "Color swatches"). | Array of objects |
 | `gallery` | `list.file_reference` | **Gated.** Per-variant media gallery — featured image first, then color-matched extras | Array of Shopify File references |
+
+### MSRP: `msrp` (variant) and `msrp_min` (product) — gated, opt-in
+
+Added 2026-10-06. Written only when the merchant turns on **Save MSRP Metafields** in PromoSync settings
+(`Shop.save_msrp_metafield`, default off). Shops without the flag do not even get the definitions, so
+feature-detect by checking the metafield value, never assume.
+
+**Why it exists.** Merchants mix pricing strategies: one supplier is priced cost plus markup, another
+MSRP minus a discount. Shopify's `compare_at_price` would therefore make every product look on sale, or
+show nothing. These metafields store the supplier's list price **independently of whatever sets the
+Shopify price**, so a theme can show "List price" against "Your price" without touching compare-at.
+
+| Key | Owner | Type | Value |
+|-----|-------|------|-------|
+| `psrestful.msrp` | variant | `number_decimal` | The supplier's **list** price at the part's **lowest-quantity tier**, rounded to 2 decimals. MSRP can differ by size (2XL and up), which is why it is per variant. |
+| `psrestful.msrp_min` | product | `number_decimal` | The lowest `msrp` across the product's variants. On Split-by-Color shops each color product gets its own minimum. |
+
+Rules that matter for themes:
+
+- **Units are currency units (dollars), not cents.** `part_price_array`, `sample_price`, and Liquid's
+  `variant.price` are all in cents. Multiply the MSRP by 100 before comparing or passing to `money`.
+- **Absent means "no list price".** PromoSync never derives an MSRP from cost or sell price. Suppliers that
+  publish no List feed (Customer-only pricing, some PPC suppliers) leave both fields empty. Hide the list
+  price line in that case; do not fall back to the Shopify price.
+- **It is the list price for the shop's configuration** (Blank or Decorated, after the per-product
+  fallback), read from the supplier's raw List feed. Zero-priced padding tiers are ignored.
+- **It is not a tier table.** It is one number per variant. Volume pricing still comes from
+  `part_price_array`.
+- **It can be below the Shopify price** when the merchant marks up above list. Only show a "List price"
+  strike-through when MSRP is greater than the selling price.
+- Both fields are storefront-visible, pinned in the admin, and usable in smart-collection conditions
+  (for example "MSRP (lowest) is greater than 50").
+- Kept current by Update Prices, so a supplier list-price change flows through without a re-import.
+
+See `integration-patterns.md` → "List price (MSRP) against your price".
 
 ### Shipping weight, `dimension`, and `shipping_package_array` (variant)
 
@@ -612,6 +649,7 @@ These Django model fields on `Shop` control which metafields get written. If a m
 | `enable_blank_sample_sales` | Admin-only flag. Combined with `default_configuration_type='Decorated'`, this opens the gate for `blank_minimum_quantity`, `blank_part_price_array`, and `sample_price` metafields so the storefront can sell **Decorated**, **Blank**, and **Sample** variants of the same product. |
 | `default_configuration_type` | `'Decorated'` or `'Blank'` — drives what `minimum_quantity` and `part_price_array` mean. Decorated-default shops with the blank/sample gate open also get `blank_*` metafields; Blank-default shops never do (their regular metafields already are the blank values). |
 | `emit_blank_sample_metafields` (property) | Computed: `enable_blank_sample_sales AND default_configuration_type == 'Decorated'`. The single check the importer uses to decide whether to write the blank/sample trio. |
+| `save_msrp_metafield` | Opt-in (default off), labelled "Save MSRP Metafields" in PromoSync settings. Writes `psrestful.msrp` (variant) and `psrestful.msrp_min` (product) on import and keeps them current on Update Prices. See "MSRP". |
 | `import_minimum_quantity_one` | Forces `psrestful.minimum_quantity = 1` regardless of supplier value |
 | `enable_configurable_products` | Admin flag (default off). For PPC products with **>1 part group** (kits/sets/bundles — plush + apparel, tumbler + color-matched straw), builds the real variant matrix from the part-group structure instead of flattening parts into one option. Single-group products are unaffected. See "Configurable products". |
 | `enable_volume_pricing` | Activates the `quantity-price-breaks` Shopify Function |
@@ -649,6 +687,7 @@ These Django model fields on `Shop` control which metafields get written. If a m
 | Theme product-specs / features tab (custom) | `psrestful.marketing_points` (product — raw supplier copy, filter with an allow-list of `pointType`s) |
 | Native Shopify variant picker / theme swatch UI | Color option's `linkedMetafield` → `psrestful.color-swatches` metaobjects (`label`, `hex_color`). Custom themes read `product.metafields.psrestful["color-swatches"].value` directly. |
 | Theme Blank/Sample purchase UI (custom) | `psrestful.blank_minimum_quantity`, `psrestful.blank_part_price_array`, `psrestful.sample_price` (gated trio — only on Decorated-default shops with `enable_blank_sample_sales=true`) |
+| Theme list-price display (custom) | `psrestful.msrp` (variant) and `psrestful.msrp_min` (product) — gated, opt-in; decimal in currency units, multiply by 100 before comparing with `variant.price` |
 | Theme decoration-pricing UI (custom — v3) | enriched `psrestful.location_decorations` `*VariantId` fields + canonical-product `psrestful.default_variant_id` / variant `psrestful.part_price_array`. Not done by the shipped block — see `decoration-pricing.md`. |
 
 ---

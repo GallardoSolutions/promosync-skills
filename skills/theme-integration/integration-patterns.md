@@ -921,6 +921,71 @@ PCNA alone would dump ~98 internal attributes per product.
 
 ---
 
+## List price (MSRP) against your price
+
+Only on shops with **Save MSRP Metafields** on (see `metafields.md` → "MSRP"). The metafields hold the
+supplier's list price in **currency units**, while `variant.price` is in **cents**, so convert before
+comparing. Never write the MSRP into `compare_at_price`; the whole point of the metafield is to keep the
+two apart.
+
+### Product page: list price, your price, and the saving
+
+```liquid
+{%- liquid
+  assign msrp = variant.metafields.psrestful.msrp.value
+  assign msrp_cents = 0
+  if msrp
+    assign msrp_cents = msrp | times: 100 | round
+  endif
+-%}
+{%- if msrp_cents > variant.price -%}
+  {%- assign saving_cents = msrp_cents | minus: variant.price -%}
+  {%- assign saving_pct = saving_cents | times: 100 | divided_by: msrp_cents -%}
+  <div class="price-with-msrp">
+    <span class="price-with-msrp__list">List price <s>{{ msrp_cents | money }}</s></span>
+    <span class="price-with-msrp__yours">Your price {{ variant.price | money }}</span>
+    <span class="price-with-msrp__saving">Save {{ saving_pct }}%</span>
+  </div>
+{%- else -%}
+  <span class="price-with-msrp__yours">{{ variant.price | money }}</span>
+{%- endif -%}
+```
+
+`variant.price` here is the **first-tier** price. When the tier-pricing block or your own tier table is on
+the page, the quantity-adjusted price keeps coming from `part_price_array`; the MSRP line stays as the
+reference. Re-run this on variant change, using the same variant-change listener as the gallery section's
+"Variant switching" pattern: both the MSRP and the price can differ per size.
+
+### Collection card: "from" price against the lowest list price
+
+```liquid
+{%- liquid
+  assign msrp_min = product.metafields.psrestful.msrp_min.value
+  assign msrp_min_cents = 0
+  if msrp_min
+    assign msrp_min_cents = msrp_min | times: 100 | round
+  endif
+-%}
+<div class="card__price">
+  {%- if msrp_min_cents > product.price_min -%}
+    <s class="card__price-list">{{ msrp_min_cents | money }}</s>
+  {%- endif -%}
+  <span class="card__price-yours">From {{ product.price_min | money }}</span>
+</div>
+```
+
+### Smart collections and filters
+
+Because `msrp_min` is a product-level decimal with storefront access and smart-collection support, a
+merchant can build collections such as "Premium gifts" with the condition **MSRP (lowest) is greater than
+50** in the Shopify admin, with no theme code. Search & Discovery filters on the metafield work the same way.
+
+### What not to do
+
+- Do not show a list price when the metafield is empty. Empty means the supplier publishes no list price.
+- Do not divide the MSRP by 100. It is already in dollars. Only the tier arrays and `sample_price` are in cents.
+- Do not strike through when MSRP is at or below the selling price; some merchants price above list.
+
 ## Shipping weight and carton info
 
 PromoSync writes a per-unit shipping weight onto every variant's inventory item (see `metafields.md` →
