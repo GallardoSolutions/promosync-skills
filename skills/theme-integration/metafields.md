@@ -12,7 +12,6 @@ Source of truth: the metafield definitions registered by the PromoSync app.
 |-----------|-------------|--------------|
 | `psrestful` | Product, ProductVariant | Always — core sync |
 | `mm-google-shopping` | Product, ProductVariant | Only when `Shop.enable_google_merchant=true` |
-| `my_fields` | Product, ProductVariant | Only when `Shop.is_hit_a_double=true` |
 
 ---
 
@@ -83,13 +82,13 @@ This metafield exists in **two states**, both valid:
         "maxImprintColors": 6,
         "default": true,
         "priceIncludes": false,
-        "setupFeeVariantId": "gid://shopify/ProductVariant/66769244782637",
-        "runChargeVariantId": "gid://shopify/ProductVariant/66769247698989",
-        "extraColorSetupVariantId": "gid://shopify/ProductVariant/66769250000111",
-        "extraColorRunVariantId": "gid://shopify/ProductVariant/66769250000222",
-        "extraLocationSetupVariantId": "gid://shopify/ProductVariant/66769252220973",
-        "extraLocationRunVariantId": "gid://shopify/ProductVariant/66769252220988",
-        "pmsMatchVariantId": "gid://shopify/ProductVariant/66769252450349"
+        "setupFeeVariantId": "gid://shopify/ProductVariant/1001",
+        "runChargeVariantId": "gid://shopify/ProductVariant/1002",
+        "extraColorSetupVariantId": "gid://shopify/ProductVariant/1003",
+        "extraColorRunVariantId": "gid://shopify/ProductVariant/1004",
+        "extraLocationSetupVariantId": "gid://shopify/ProductVariant/1005",
+        "extraLocationRunVariantId": "gid://shopify/ProductVariant/1006",
+        "pmsMatchVariantId": "gid://shopify/ProductVariant/1007"
       },
       {
         "decorationId": 58350,
@@ -97,8 +96,8 @@ This metafield exists in **two states**, both valid:
         "maxImprintColors": 6,
         "default": false,
         "priceIncludes": false,
-        "setupFeeVariantId": "gid://shopify/ProductVariant/66769262051373",
-        "runChargeVariantId": "gid://shopify/ProductVariant/66769269784621"
+        "setupFeeVariantId": "gid://shopify/ProductVariant/2001",
+        "runChargeVariantId": "gid://shopify/ProductVariant/2002"
       }
     ]
   }
@@ -257,17 +256,6 @@ Only present when `Shop.enable_google_merchant=true`.
 | `custom_label_3` | `single_line_text_field` | Campaign label | user-defined |
 | `custom_label_4` | `single_line_text_field` | Campaign label | user-defined |
 | `product_detail` | `json` | Structured product details | JSON object |
-
-### `my_fields.*` (product) — Hit a Double multi-location inventory
-
-Only present when `Shop.is_hit_a_double=true`.
-
-| Key | Type | Purpose | Example |
-|-----|------|---------|---------|
-| `ds_style` | `single_line_text_field` | DropShip style/product id | `"DS12345"` |
-| `sm_style` | `single_line_text_field` | SanMar style id | `"SM9876"` |
-| `ss_style` | `single_line_text_field` | S&S Activewear style id | `"SS5432"` |
-| `cm_style` | `single_line_text_field` | Carolina Made style id | `"CM1111"` |
 
 ---
 
@@ -430,18 +418,6 @@ Only present when `Shop.enable_google_merchant=true`.
 | `age_group` | `single_line_text_field` | Age group (if shop opts in) | `"adult"` |
 | `gender` | `single_line_text_field` | Gender (if shop opts in) | `"unisex"` |
 
-### `psrestful.*` (variant) — Hit a Double multi-location inventory
-
-Only present when `Shop.is_hit_a_double=true`.
-
-| Key | Type | Purpose |
-|-----|------|---------|
-| `ProductID_VariantID` | `single_line_text_field` | US Shopify ProductID/VariantID mapping |
-| `variant_key` | `single_line_text_field` | DropShip variant/inventory key |
-| `variant_sm_key` | `single_line_text_field` | SanMar variant/inventory key |
-| `variant_ss_key` | `single_line_text_field` | S&S Activewear variant/inventory key |
-| `variant_cm_key` | `single_line_text_field` | Carolina Made variant/inventory key |
-
 ---
 
 ## Color swatches (option-linked metaobjects)
@@ -588,7 +564,6 @@ These Django model fields on `Shop` control which metafields get written. If a m
 | `emit_blank_sample_metafields` (property) | Computed: `enable_blank_sample_sales AND default_configuration_type == 'Decorated'`. The single check the importer uses to decide whether to write the blank/sample trio. |
 | `import_minimum_quantity_one` | Forces `psrestful.minimum_quantity = 1` regardless of supplier value |
 | `enable_configurable_products` | Admin flag (default off). For PPC products with **>1 part group** (kits/sets/bundles — plush + apparel, tumbler + color-matched straw), builds the real variant matrix from the part-group structure instead of flattening parts into one option. Single-group products are unaffected. See "Configurable products". |
-| `is_hit_a_double` | Adds `my_fields.*` + `psrestful.variant_*_key` multi-location fields |
 | `enable_volume_pricing` | Activates the `quantity-price-breaks` Shopify Function |
 | `color_metafield_definition_id` | Cached GID of color-swatches metafield definition |
 | `color_metaobject_definition_id` | Cached GID of color-swatch metaobject definition |

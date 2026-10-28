@@ -13,7 +13,7 @@ This skill's job: **make it trivial to build beautiful, functional Shopify store
 
 Activate this skill when the user is doing any of the following:
 
-- Editing a Shopify theme that references `psrestful.*`, `mm-google-shopping.*`, or `my_fields.*` metafields
+- Editing a Shopify theme that references `psrestful.*` or `mm-google-shopping.*` metafields
 - Adding, styling, or debugging PromoSync theme app blocks (tier pricing, location decorations, min quantity notice, promo pricing engine embed, volume pricing note)
 - Building custom Liquid that needs to read PromoSync tier pricing (`part_price_array`), decoration locations (`location_decorations`), or minimum quantities
 - **Pricing decorations** — turning the enriched `location_decorations` `*VariantId` fields into setup fees, run charges, extra-color/extra-location surcharges, and PMS-match upcharges, and adding the right cart lines (see `decoration-pricing.md`)
@@ -43,7 +43,7 @@ The skill is organized into reference files. **Read the files you need** — don
 
 These come up so often that you should keep them in working memory:
 
-1. **PromoSync's primary namespace is `psrestful`.** Two other namespaces exist conditionally: `mm-google-shopping` (when `Shop.enable_google_merchant=true`) and `my_fields` (when `Shop.is_hit_a_double=true`).
+1. **PromoSync's primary namespace is `psrestful`.** One other namespace exists conditionally: `mm-google-shopping` (when `Shop.enable_google_merchant=true`).
 
 2. **Four highest-value metafields for theme work:**
    - `product.metafields.psrestful.minimum_quantity` (`number_integer`) — minimum order qty

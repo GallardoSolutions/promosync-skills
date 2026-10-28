@@ -119,8 +119,8 @@ Variant SKU is deterministic: `{method_slug}-{charge_kind}-{pricing_hash}` (e.g.
         "maxImprintColors": 99,
         "default": false,
         "priceIncludes": false,
-        "setupFeeVariantId": "gid://shopify/ProductVariant/66769262051373",
-        "runChargeVariantId": "gid://shopify/ProductVariant/66769269784621"
+        "setupFeeVariantId": "gid://shopify/ProductVariant/2001",
+        "runChargeVariantId": "gid://shopify/ProductVariant/2002"
       },
       {
         "decorationId": 58355,
@@ -128,13 +128,13 @@ Variant SKU is deterministic: `{method_slug}-{charge_kind}-{pricing_hash}` (e.g.
         "maxImprintColors": 6,
         "default": true,
         "priceIncludes": true,
-        "setupFeeVariantId": "gid://shopify/ProductVariant/66769244782637",
-        "runChargeVariantId": "gid://shopify/ProductVariant/66769247698989",
-        "extraColorSetupVariantId": "gid://shopify/ProductVariant/66769250000111",
-        "extraColorRunVariantId": "gid://shopify/ProductVariant/66769250000222",
-        "extraLocationSetupVariantId": "gid://shopify/ProductVariant/66769252220973",
-        "extraLocationRunVariantId": "gid://shopify/ProductVariant/66769252220988",
-        "pmsMatchVariantId": "gid://shopify/ProductVariant/66769252450349"
+        "setupFeeVariantId": "gid://shopify/ProductVariant/1001",
+        "runChargeVariantId": "gid://shopify/ProductVariant/1002",
+        "extraColorSetupVariantId": "gid://shopify/ProductVariant/1003",
+        "extraColorRunVariantId": "gid://shopify/ProductVariant/1004",
+        "extraLocationSetupVariantId": "gid://shopify/ProductVariant/1005",
+        "extraLocationRunVariantId": "gid://shopify/ProductVariant/1006",
+        "pmsMatchVariantId": "gid://shopify/ProductVariant/1007"
       }
     ]
   }
