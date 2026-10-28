@@ -921,6 +921,85 @@ PCNA alone would dump ~98 internal attributes per product.
 
 ---
 
+## Shipping weight and carton info
+
+PromoSync writes a per-unit shipping weight onto every variant's inventory item (see `metafields.md` →
+"Shipping weight"), so Shopify's weight-based and carrier-calculated rates already work. These snippets only
+*display* that data. Never recompute shipping weight in the theme.
+
+### Estimated shipping weight per cart line
+
+`item.variant.weight` is always in grams; `weight_with_unit` formats it in the variant's unit.
+
+```liquid
+{%- comment -%} Inside the cart line-item loop. Hidden when PromoSync could not determine a weight. {%- endcomment -%}
+{%- if item.variant.weight > 0 -%}
+  {%- assign line_weight = item.variant.weight | times: item.quantity -%}
+  <span class="cart-item__weight">
+    Est. shipping weight: {{ line_weight | weight_with_unit: item.variant.weight_unit }}
+  </span>
+{%- endif -%}
+```
+
+### Total estimated weight in the cart footer
+
+```liquid
+{%- liquid
+  assign cart_weight = 0
+  for item in cart.items
+    assign line_weight = item.variant.weight | times: item.quantity
+    assign cart_weight = cart_weight | plus: line_weight
+  endfor
+-%}
+{%- if cart_weight > 0 -%}
+  <p class="cart__weight">Estimated shipping weight: {{ cart_weight | weight_with_unit }}</p>
+{%- endif -%}
+```
+
+`cart.total_weight` gives the same number in grams without the loop; the loop is shown so it can skip lines
+you do not want counted (for example decoration charge lines, see `decoration-pricing.md`).
+
+### "Ships N per carton" on the product page
+
+Reads the master carton from `shipping_package_array`. Values are strings, so coerce with `plus: 0`.
+
+```liquid
+{%- liquid
+  assign cartons = variant.metafields.psrestful.shipping_package_array.value
+  assign carton_qty = 0
+  assign carton_weight = 0
+  assign carton_uom = ''
+  for pack in cartons
+    assign qty = pack.quantity | plus: 0
+    if qty > carton_qty
+      assign carton_qty = qty
+      assign carton_weight = pack.weight | plus: 0
+      assign carton_uom = pack.weightUom | downcase
+    endif
+  endfor
+-%}
+{%- if carton_qty > 0 -%}
+  <p class="product__carton">
+    Ships {{ carton_qty }} per carton{% if carton_weight > 0 %}, about {{ carton_weight }} {{ carton_uom }} per carton{% endif %}
+  </p>
+{%- endif -%}
+```
+
+Pair this with the minimum quantity notice: distributors often want to nudge buyers toward full-carton
+quantities, and `carton_qty` is the number to suggest.
+
+### Product dimensions row
+
+```liquid
+{%- assign dim = variant.metafields.psrestful.dimension.value -%}
+{%- if dim and dim.width and dim.height -%}
+  <p class="product__dimensions">
+    {{ dim.width }} x {{ dim.height }}{% if dim.depth %} x {{ dim.depth }}{% endif %} {{ dim.dimensionUom | downcase }}
+    {%- if dim.weight and dim.weight != "0" %}, {{ dim.weight }} {{ dim.weightUom | downcase }}{% endif %}
+  </p>
+{%- endif -%}
+```
+
 ## Debugging tips
 
 1. **Metafield returns nothing?** Check that storefront access is enabled on the metafield definition in Shopify admin. PromoSync may write the value, but `product.metafields.*` won't expose it to the storefront unless the definition allows it.

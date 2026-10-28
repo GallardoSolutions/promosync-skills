@@ -270,13 +270,63 @@ Only present when `Shop.enable_google_merchant=true`.
 | `part_price_array` | `json` | Volume/tier pricing for the default configuration (decorated when `default_configuration_type='Decorated'`, blank otherwise) | See shape below |
 | `blank_part_price_array` | `json` | **Gated.** Same shape as `part_price_array`, but blank (no-decoration) prices. Only emitted when `Shop.emit_blank_sample_metafields == true`. Always *additive* to `part_price_array` — both are present on shops that emit it, never overlap. | Same shape as `part_price_array` |
 | `sample_price` | `number_integer` | **Gated.** Single-unit blank price **in cents**. Only emitted when `blank_part_price_array` has a tier with `quantityMin == 1` (i.e. the supplier actually offers qty-1 blank). When absent, the merchant cannot fulfill a single-unit sample — do not infer or fabricate a price. | `1500` (=$15.00) |
-| `dimension` | `json` | Width/height/depth/weight + UOMs | See PSRESTful Dimension object |
+| `dimension` | `json` | Width/height/depth/weight + UOMs. Display only; see "Shipping weight" below | `{"dimensionUom": "IN", "width": "3.5", ...}` |
 | `apparel_size` | `json` | Style, label size, custom size | See PSRESTful ApparelSize object |
 | `specification_array` | `json` | Product specs (length, chest, etc.) | Array of objects |
 | `product_package_array` | `json` | Packaging options | Array of objects |
-| `shipping_package_array` | `json` | Master carton / shipping packaging | Array of objects |
+| `shipping_package_array` | `json` | Carton / case-pack configurations (units per carton, gross weight, box dimensions). PromoSync also derives the variant's shipping weight from it; see "Shipping weight" below | Array of objects |
 | `color_array` | `json` | Available colors with hex codes, dumped from PromoStandards `ColorArray`. **Separate from color swatches** — this is raw per-variant color data, *not* the swatch mechanism (swatches = option-linked `custom-color-swatch` metaobjects; see "Color swatches"). | Array of objects |
 | `gallery` | `list.file_reference` | **Gated.** Per-variant media gallery — featured image first, then color-matched extras | Array of Shopify File references |
+
+### Shipping weight, `dimension`, and `shipping_package_array` (variant)
+
+PromoSync does the shipping-weight work so the theme and the merchant do not have to. On every import and
+every "add variants" run, each variant's Shopify inventory item is created with:
+
+- `requiresShipping: true`
+- `countryCodeOfOrigin` mapped from the supplier's country of origin (Shopify's code list; `VI` becomes `VG`)
+- `measurement.weight`, chosen in this order:
+  1. The supplier's per-unit `Dimension.weight`, kept in its own unit when Shopify can represent it
+     (`LB`, `OZ`, `KG`). Milligrams (`ME`) are converted to pounds.
+  2. Otherwise, a per-unit weight **derived from the largest case pack** in `ShippingPackageArray`:
+     carton gross weight divided by units per carton, converted to pounds. The largest pack is used on
+     purpose because it amortizes the empty-box tare best; averaging the packs would bias high.
+     Packs with a zero or missing weight or quantity are skipped.
+  3. A derived unit weight above 150 lb is treated as bad supplier data and discarded.
+  4. When nothing usable exists, the variant is left without a weight.
+
+Many apparel suppliers (S&S for example) send `0` or nothing for the per-unit weight and only report
+carton weights, so path 2 is what gives their variants a weight. Hard-goods suppliers such as HIT usually
+take path 1. Added 2026-08-09.
+
+**What this means for a theme.** Shopify's weight-based shipping rates and carrier-calculated rates work for
+imported products with no theme code. In Liquid, read the result from `variant.weight` (always grams) and
+`variant.weight_unit`, and format with `weight_with_unit`. Do not recompute weights from the metafields
+below; they are there for display (carton counts, product dimensions), not for shipping math.
+See `integration-patterns.md` → "Shipping weight and carton info".
+
+**`dimension` shape** (the PromoStandards `Dimension` object, one per variant, any field may be null):
+
+```json
+{"dimensionUom": "IN", "depth": "3.5", "height": "9.25", "width": "3.5", "weightUom": "LB", "weight": "0.79"}
+```
+
+**`shipping_package_array` shape** (one entry per pack configuration the supplier offers; `quantity` is
+units per carton, `weight` is the gross carton weight):
+
+```json
+[
+  {"packageType": "Carton", "description": "Master carton", "quantity": "72", "dimensionUom": "IN",
+   "depth": "18", "height": "12", "width": "14", "weightUom": "LB", "weight": "31.5"},
+  {"packageType": "Carton", "description": "Inner pack", "quantity": "12", "dimensionUom": "IN",
+   "depth": "9", "height": "6", "width": "7", "weightUom": "LB", "weight": "5.6"}
+]
+```
+
+Numbers are serialized as **strings** (they are decimals upstream). In Liquid, coerce with `| plus: 0`
+before comparing or sorting. `packageType` is required by the PromoStandards spec but some suppliers
+(Aakron) send null. `weightUom` is one of `LB`, `OZ`, `KG`, `ME` (milligram); `dimensionUom` is one of
+`IN`, `FT`, `YD`, `MM`, `CM`, `MR` (meter).
 
 ### `gallery` (variant) — gated, may be absent
 
