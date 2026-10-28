@@ -1067,6 +1067,8 @@ quantities, and `carton_qty` is the number to suggest.
 
 ## Debugging tips
 
+0. **Before touching Liquid, confirm the data exists.** Open the product in Shopify admin and check its `psrestful.*` metafields. If the product or a variant is missing, or the merchant got a PromoSync result email, start with `notifications.md`; the cause is usually an import skip, a held price, or a supplier data gap, not the theme.
+
 1. **Metafield returns nothing?** Check that storefront access is enabled on the metafield definition in Shopify admin. PromoSync may write the value, but `product.metafields.*` won't expose it to the storefront unless the definition allows it.
 2. **Use `| json` in Liquid to dump a value to HTML for inspection:** `<script>window.__ps_debug = {{ product.metafields.psrestful.location_decorations.value | json }};</script>`
 3. **Check write status via admin:** `Products → [product] → Metafields` — should show `psrestful.*` entries.

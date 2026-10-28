@@ -55,6 +55,7 @@ or turn on auto-update for the `psrestful` marketplace in the `/plugin` menu.
 | `theme-blocks.md` | The theme app blocks and the volume-pricing Shopify Function |
 | `integration-patterns.md` | Liquid and JS snippets for product page, cart, and variant switching |
 | `decoration-pricing.md` | Pricing decorations from the enriched `location_decorations` metafield |
+| `notifications.md` | What each PromoSync result email means and who fixes it |
 | `theme-workflow.md` | Choosing a theme for promotional products, setting up the store, Shopify CLI, and GitHub version control |
 | `design-coordination.md` | Working with Shopify MCP and design tools on PromoSync UI |
 
