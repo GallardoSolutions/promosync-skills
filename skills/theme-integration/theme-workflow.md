@@ -3,7 +3,8 @@
 Read this when the user is starting a store or a theme from scratch, choosing a theme, setting up a local
 development loop, or asking how to keep theme code under version control. It is written for distributors and
 developers who are new to Shopify theme work. The other files in this skill assume a theme already exists;
-this one gets you there safely.
+this one gets you there safely. Section 7 covers PSRESTful rate limits and how many products a plan can
+sync per day.
 
 Platform facts here were checked against shopify.dev in October 2026. When a command or menu path does not
 match what the user sees, look it up with the Shopify Dev MCP before improvising.
@@ -245,7 +246,62 @@ the admin are not captured automatically, so pull the theme with `shopify theme 
 
 ---
 
-## 7. How the agent should drive this
+## 7. Rate limits and sync capacity
+
+PromoSync reads supplier data through the PSRESTful API, and PSRESTful meters calls per account per day.
+The storefront is never part of that: **the theme reads metafields, never PSRESTful**, so theme traffic
+costs zero calls and nothing in Liquid or theme JS can cause a rate-limit error. The quota matters for
+plan sizing and for understanding why a sync stopped halfway.
+
+### Three different limits
+
+| Limit | Who sets it | What PromoSync does when it hits |
+|-------|-------------|----------------------------------|
+| **Account daily quota** | The PSRESTful plan. Free 10, Standard 300, Premium 15,000, Business 50,000 calls a day, Enterprise per contract. Shared by every user, API key and PromoSync store on the account; sub-accounts draw on the parent. Resets at 00:00 UTC. | Stops the run, marks the remaining products "not attempted", and emails "Rate limit exceeded, please try again tomorrow or upgrade your PSRESTful plan". Recent Activity keeps the retry button. |
+| **Supplier throttle** | The supplier, per login. Showdown Displays allows about 40 supplier calls a minute, and one product fetch is roughly nine of them. | Waits the supplier's retry-after (capped at two minutes), up to three times, then gives up on that one product and continues. The email says the limit is on the supplier's side, not the plan. |
+| **Shopify API throttling** | Shopify, per store. | Retries automatically, then reports the product as failed with "Shopify API rate limit reached" or "Daily variant creation limit reached". |
+
+### What consumes the quota
+
+Every PromoSync job that touches supplier data: product import, Add New Variants, Update Prices,
+inventory sync, Update Metafields, Add Missing Images, Insert Decorations. As a rule of thumb, **each
+product touched is about one PSRESTful call**; a product fetch with its expands (media, inventory,
+pricing) is one request to PSRESTful even though it fans out to several supplier calls.
+
+So the daily allowance is, roughly, the number of products the store can import or refresh per day:
+
+| Plan | Calls a day | Fits |
+|------|-------------|------|
+| Free | 10 | Trying the app on a handful of products |
+| Standard | 300 | A small catalog refreshed every few days, or one supplier's prices daily |
+| Premium | 15,000 | Most distributors: a few thousand SKUs with daily price and inventory syncs |
+| Business | 50,000 | Large multi-supplier catalogs synced daily |
+
+Current prices, pack sizes, and the exact rules are on the PSRESTful docs page
+[Rate Limits](https://psrestful.com/docs/rate-limits); link to it rather than copying numbers.
+
+### Planning a large import
+
+- **Buy an API Boost before a catalog import**, or expect the run to stop at the quota and resume the next
+  day. Boosts are prepaid packs for Standard, Premium and Business, used only after the day's allowance is
+  gone, valid 12 months. Free and Trial accounts cannot buy them.
+- **A run stopped by the quota leaves the catalog half updated.** If some products show fresh prices and
+  others stale, or an import created only part of a supplier's products, check PromoSync > Overview >
+  Recent Activity for "Stopped early: the PSRESTful account has used all of its API calls for today"
+  before suspecting the theme.
+- **Scheduled syncs spend calls every day.** Several PromoSync stores on one PSRESTful account share one
+  allowance, so an agency running three stores on one account splits it three ways.
+- Throttled suppliers slow a run down but do not end it. A few "retry this product in a few minutes" rows
+  after a big Showdown import are normal; the retry button handles them.
+
+### What the agent should say
+
+- When asked "will this theme feature hit the API limit": no. Themes never call PSRESTful.
+- When a merchant plans an import of N products on plan P: compare N with the table, suggest a Boost or a
+  plan change when N exceeds the daily calls, and tell them the run resumes from Recent Activity if it stops.
+- When data is partially stale: rate limit first, theme second. See `notifications.md`.
+
+## 8. How the agent should drive this
 
 When a user is at the start of this journey:
 
@@ -258,3 +314,4 @@ When a user is at the start of this journey:
 5. Run `shopify theme check` and, when available, the Shopify Dev MCP validate tool on every Liquid change.
 6. Finish each session with a commit on a feature branch and a short note of what to verify in the theme
    editor.
+7. Before a catalog import, check the plan's daily calls against the product count (section 7).

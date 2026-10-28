@@ -55,7 +55,7 @@ translations are reused by Price Sync Results. The first column is the merchant-
 
 | Message the merchant sees | Cause | Action |
 |---------------------------|-------|--------|
-| "Rate limit exceeded, please try again tomorrow or upgrade your PSRESTful plan" | The account's daily PSRESTful quota. | Retry tomorrow, or upgrade. Recent Activity has the retry button. |
+| "Rate limit exceeded, please try again tomorrow or upgrade your PSRESTful plan" | The account's daily PSRESTful quota, shared by every store and API key on the account. The run stopped and the rest was not attempted. | Retry tomorrow, buy an API Boost, or upgrade. Recent Activity has the retry button. Plan sizing: `theme-workflow.md` section 7. |
 | "The supplier is limiting how fast its data can be requested. This is a temporary limit on the supplier's side, not your PSRESTful plan. PromoSync waited and retried ..." | The supplier throttles calls per minute (Showdown Displays, about 40 per minute). | Retry in a few minutes. |
 | "Shopify API rate limit reached during import. The system retried automatically but the limit persisted." / "Daily variant creation limit reached." / "This product is currently being modified." | Shopify-side throttling. | Import fewer products at once, or retry later. |
 | "This product couldn't be retrieved because one of the supplier's data services is not currently available through PSRESTful." | A PromoStandards service (PPC, Inventory, Media) is not offered or not configured for that supplier. The product itself exists. | Retry shortly; contact PSRESTful support if it persists. Do not tell the merchant to verify the product ID. |
