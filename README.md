@@ -31,15 +31,17 @@ claude mcp add shopify-dev-mcp -s user -- npx -y @shopify/dev-mcp@latest
 
 Either way the PromoSync skill hands Shopify-platform questions to the Shopify tooling and keeps the PromoSync-specific parts (metafield shapes, pricing rules, block behavior) for itself. Finish with `shopify theme check` on the theme. Details at [shopify.dev/docs/apps/build/ai-toolkit](https://shopify.dev/docs/apps/build/ai-toolkit).
 
-## Update
+## Update and versions
 
-Third-party marketplaces do not auto-update by default. Pull the latest catalog with:
+The plugin carries a version in `.claude-plugin/plugin.json`, and `CHANGELOG.md` lists what changed in each one. Claude Code only installs an update when that version changes, which is why every release bumps it.
+
+Third-party marketplaces do not auto-update by default. Pull the latest version with:
 
 ```
-/plugin update promosync@psrestful
+claude plugin update promosync@psrestful
 ```
 
-or turn on auto-update for the `psrestful` marketplace in the `/plugin` menu.
+or open `/plugin`, go to Installed, and choose Update now. The Marketplaces tab has an auto-update switch for the `psrestful` marketplace.
 
 ## Using it without Claude Code
 
@@ -57,6 +59,7 @@ or turn on auto-update for the `psrestful` marketplace in the `/plugin` menu.
 | `decoration-pricing.md` | Pricing decorations from the enriched `location_decorations` metafield |
 | `notifications.md` | What each PromoSync result email means and who fixes it |
 | `theme-workflow.md` | Choosing a theme for promotional products, setting up the store, Shopify CLI, and GitHub version control |
-| `design-coordination.md` | Working with Shopify MCP and design tools on PromoSync UI |
+| `design-coordination.md` | Design briefs and mockup hand-off with the Shopify Dev MCP and design tools |
+| `CHANGELOG.md` | What changed in each version |
 
 Questions or gaps: https://promosync-docs.psrestful.com or support from PSRESTful.

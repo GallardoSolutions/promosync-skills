@@ -1,11 +1,11 @@
-# Design Coordination: PromoSync + Shopify MCP + Design Tools
+# Design Coordination: PromoSync, Shopify Dev MCP and Design Tools
 
 This skill is a **PromoSync expert**. It coordinates with two other capabilities:
 
-1. **Shopify MCP / Shopify docs** — for platform-level knowledge (Liquid filters, theme architecture, section schemas, Shopify Function API, cart attributes).
-2. **Design tools (nano banana pro, Figma, Midjourney, etc.)** — for visual mockups.
+1. **Shopify Dev MCP / Shopify docs**: platform-level knowledge (Liquid filters, theme architecture, section schemas, Shopify Functions API, cart attributes) and validation of generated Liquid.
+2. **Design tools**: Figma and the Shopify theme editor first, because they produce something a developer can build from directly; image generation tools (any model the user prefers) for quick visual exploration.
 
-The goal: a user should be able to say *"Design me a beautiful product page for our PromoSync-powered store"* and end up with mockups that already reflect the real data shapes and states.
+The goal: a user should be able to say *"Design me a product page for our PromoSync-powered store"* and end up with mockups that already reflect the real data shapes and states.
 
 ---
 
@@ -22,15 +22,16 @@ User request
             │ produces design brief
             ▼
 ┌─────────────────────────┐     ┌──────────────────────────┐
-│  Design tool            │────▶│  Shopify MCP             │
-│  (nano banana pro)      │     │  (theme conventions,     │
-│  produces visual mockup │     │   Liquid, a11y guidance) │
+│  Design tool            │────▶│  Shopify Dev MCP         │
+│  (Figma, theme editor,  │     │  (theme conventions,     │
+│   image generation)     │     │   Liquid, a11y guidance) │
+│  produces visual mockup │     │                          │
 └───────────┬─────────────┘     └──────────────────────────┘
             │
             ▼
 ┌─────────────────────────┐
 │  PromoSync expert       │  ← turn mockup into Liquid + JS
-│  + Shopify MCP          │      using real metafield reads
+│  + Shopify Dev MCP      │      using real metafield reads
 └─────────────────────────┘
 ```
 
@@ -38,37 +39,37 @@ Your role (as this skill): translate PromoSync's **data reality** into **design 
 
 ---
 
-## Step 1 — Build the design brief before calling the design tool
+## Step 1: Build the design brief before touching a design tool
 
-Before asking nano banana pro for a mockup, produce a **short, structured brief** that encodes:
+Before asking any tool for a mockup, produce a **short, structured brief** that encodes:
 
-- **Component purpose** (e.g., "tier pricing table for product page")
-- **Data shape** (from `metafields.md` — paste the relevant JSON example)
+- **Component purpose** (for example "tier pricing table for product page")
+- **Data shape** (from `metafields.md`; paste the relevant JSON example)
 - **States to render** (empty, 1 tier, 3 tiers, 5 tiers, matched tier highlighted, variant switching)
-- **Copy patterns** (how numbers are formatted, currency, plural/singular)
-- **Constraints** (mobile-first, fits alongside native Shopify variant picker, must not duplicate Shopify's native `quantity_price_breaks` UI)
-- **Theme context** (reuse the theme's existing design language — `color-{{ color_scheme }}`, `.gradient`, accordion component, price component, product info wrapper spacing)
+- **Copy patterns** (how numbers are formatted, currency, plural and singular)
+- **Constraints** (mobile-first, fits alongside the native Shopify variant picker, must not duplicate Shopify's native `quantity_price_breaks` UI)
+- **Theme context** (reuse the theme's existing design language: `color-{{ color_scheme }}`, `.gradient`, accordion component, price component, product info wrapper spacing)
 
 ### Brief template
 
 ```
 COMPONENT: <name>
-PLACEMENT: <page type> — <position relative to other components>
+PLACEMENT: <page type>, <position relative to other components>
 
 DATA (from PromoSync):
   <metafield path>
   Shape:
     <paste JSON example from metafields.md>
   Notes:
-    - <critical rule, e.g. "price in cents">
-    - <tier match rule, etc.>
+    - <critical rule, e.g. "price in cents, store currency">
+    - <tier match rule, volume pricing mode, etc.>
 
 STATES TO DESIGN:
-  1. Empty (no data) — <behavior>
-  2. Single tier / flat — <behavior>
-  3. Multiple tiers / typical — <behavior>
-  4. Active/selected state — <behavior>
-  5. Variant switch — <transition behavior>
+  1. Empty (no data): <behavior>
+  2. Single tier / flat: <behavior>
+  3. Multiple tiers / typical: <behavior>
+  4. Active/selected state: <behavior>
+  5. Variant switch: <transition behavior>
 
 COPY:
   - <exact labels>
@@ -76,22 +77,22 @@ COPY:
   - <fallback text>
 
 CONSTRAINTS:
-  - Mobile-first (320px → 768px → 1024px)
+  - Mobile-first (320px, 768px, 1024px)
   - Matches the host theme's design language (see theme.liquid settings)
   - Respects color-scheme CSS variables
   - WCAG AA contrast
-  - No conflict with native Shopify <quantity-price-breaks> component
+  - No conflict with the native Shopify <quantity-price-breaks> component
 
 OUT OF SCOPE:
-  - Checkout discount UI (applied by Shopify Function, not theme)
+  - Checkout discount UI (applied by PromoSync's Quantity Price Breaks Function, not the theme)
   - <anything else>
 ```
 
 ---
 
-## Step 2 — Prompt templates for nano banana pro
+## Step 2: Prompt templates for the design tool
 
-Paste one of these after filling in the brief. Keep prompts concrete: specific data values, specific dimensions, specific color tokens.
+Paste one of these after filling in the brief. They work as a Figma AI or image-generation prompt and as a hand-off note to a human designer. Keep prompts concrete: specific data values, specific dimensions, specific color tokens.
 
 ### Tier pricing table (product page)
 
@@ -106,12 +107,12 @@ DATA (real metafield from PromoSync):
     { "quantityMin": 50,  "price": 1800 },
     { "quantityMin": 100, "price": 1500 }
   ]
-  (price is in cents — render as dollars: $25.00, $22.00, $20.00, $18.00, $15.00)
+  (price is in cents in the store currency; render as money: $25.00, $22.00, $20.00, $18.00, $15.00)
 
 LAYOUTS REQUIRED:
-  1. Compact horizontal strip (≤768px width) — 2–3 visible tiers, overflow scrolls
-  2. Full table (≥768px) — all tiers, columns: Qty, Price, Save
-  3. Collapsible (accordion) variant for use in sidebar
+  1. Compact horizontal strip (<=768px width): 2 or 3 visible tiers, overflow scrolls
+  2. Full table (>=768px): all tiers, columns: Qty, Price, Save
+  3. Collapsible (accordion) variant for use in a sidebar
 
 STATES:
   - Default: current tier (based on qty input) highlighted with accent color
@@ -119,26 +120,26 @@ STATES:
   - Switching variant: brief fade transition
 
 STYLE:
-  - Aesthetic: clean, modern, minimal — matches the host Shopify theme
-  - Typography: sans-serif, similar to Inter or system stack
+  - Aesthetic: clean, modern, minimal; matches the host Shopify theme
+  - Typography: sans-serif, similar to Inter or the system stack
   - Accent color: customer brand blue (placeholder #2563eb)
   - Corners: 8px radius
   - Spacing: generous padding inside cells
 
-OUTPUT: 3 variants showing all three layouts, each in light + dark mode.
+OUTPUT: 3 variants showing all three layouts, each in light and dark mode.
 ```
 
 ### Decoration configurator with live pricing (product page)
 
-This is the **v3** decoration UI — it selects locations/methods **and** computes a live price breakdown
-(setup + run-tier + extra-color + extra-location + PMS). For the data shape and math see
-`decoration-pricing.md`; for the JS see `integration-patterns.md` → "Decoration pricing". Note the shipped
-theme block does NOT do pricing — this is a custom-code design.
+This selects locations and methods **and** computes a live price breakdown (setup, run tier, extra color,
+extra location, PMS). For the data shape and math see `decoration-pricing.md`; for the JS see
+`integration-patterns.md`, "Decoration pricing". The shipped theme block does NOT do pricing; this is a
+custom-code design.
 
 ```
 Design a decoration configurator for a promotional product page that shows a live price breakdown.
 
-DATA (real enriched metafield from PromoSync — psrestful.location_decorations):
+DATA (real enriched metafield from PromoSync, psrestful.location_decorations):
   [
     { "locationName": "Front Chest", "defaultLocation": true, "decorationsIncluded": 1, "maxDecoration": 1,
       "decorations": [
@@ -152,42 +153,43 @@ DATA (real enriched metafield from PromoSync — psrestful.location_decorations)
       ]}
   ]
   Resolved prices (per chosen variant): setup fee $50.00; run charge tier ladder
-  [{qty 1: $0.85},{qty 144: $0.70}] (cents in data, render as dollars); extra-color setup $12.00 + run
-  $0.10/unit; extra-location setup $68.50 + run $0.05/unit; PMS match $25.00/color.
+  [{qty 1: $0.85},{qty 144: $0.70}] (cents in data, render as money); extra-color setup $12.00 plus run
+  $0.10/unit; extra-location setup $68.50 plus run $0.05/unit; PMS match $25.00/color.
 
 UX:
   - Location selector (chips or dropdown; default-select defaultLocation).
   - Method selector for that location (default-select the `default` method).
-  - Imprint COLOR-COUNT stepper, capped at maxImprintColors. First `includedColors` (usually 1) are free;
-    extras add extra-color setup (one-time) + extra-color run (per unit).
-  - Optional ADDITIONAL-LOCATION toggle(s); first `decorationsIncluded` are free, extras add
-    extra-location setup + run.
-  - Optional "Pantone (PMS) match" count — flat per color, per order.
+  - Imprint COLOR-COUNT stepper, capped at maxImprintColors. The first `includedColors` (usually 1) are free;
+    extras add extra-color setup (one-time) plus extra-color run (per unit).
+  - Optional ADDITIONAL-LOCATION toggle(s); the first `decorationsIncluded` are free, extras add
+    extra-location setup plus run.
+  - Optional "Pantone (PMS) match" count: flat per color, per order.
   - Quantity input drives the per-unit terms.
   - LIVE PRICE BREAKDOWN panel itemizing each charge (label, qty basis, line total) and a grand total,
-    updating as the customer changes colors / locations / qty.
+    updating as the customer changes colors, locations or qty.
 
 STATES:
-  1. priceIncludes=true method → show method, hide setup/run lines ("Decoration included").
-  2. Method with only setup + run (no extras available) → no extra-color/location/PMS rows.
-  3. Method with all 7 charges → full breakdown.
-  4. Empty / unenriched product (no *VariantId fields) → render selector as info-only, no pricing.
-  5. Quantity crosses a run-charge tier boundary (e.g. 143 → 144) → per-unit price drops, breakdown re-totals.
+  1. priceIncludes=true method: show the method, hide setup and run lines ("Decoration included").
+  2. Method with only setup plus run (no extras available): no extra-color, location or PMS rows.
+  3. Method with all charges: full breakdown.
+  4. Empty or unenriched product (no *VariantId fields): render the selector as info-only, no pricing.
+  5. Quantity crosses a run-charge tier boundary (for example 143 to 144): per-unit price drops, breakdown re-totals.
 
 COPY:
-  - Prices in cents in data — ALWAYS render as dollars ($0.85, not 85).
-  - Distinguish one-time (setup) vs per-unit (run) charges visually.
+  - Prices are in cents in the data; ALWAYS render as money ($0.85, not 85).
+  - Distinguish one-time (setup) from per-unit (run) charges visually.
   - "Extra color" scales with design colors; "PMS match" is the custom-mix cost per Pantone color.
 
 CONSTRAINTS:
-  - Sits between variant picker and quantity input (or as an expandable "Customize" panel).
-  - ≤600px wide on desktop, full width on mobile.
+  - Sits between the variant picker and the quantity input (or as an expandable "Customize" panel).
+  - <=600px wide on desktop, full width on mobile.
   - Keyboard-accessible; clear required fields.
 
 OUT OF SCOPE:
-  - Tier-price enforcement at checkout (a Shopify Function / draft order does that; the breakdown is display).
+  - Tier-price enforcement at checkout (PromoSync's Quantity Price Breaks Function does that when Volume
+    Pricing is on; the breakdown is display).
 
-OUTPUT: One mobile + one desktop mockup for states 1, 3, and 4.
+OUTPUT: One mobile and one desktop mockup for states 1, 3, and 4.
 ```
 
 ### Minimum quantity notice
@@ -199,13 +201,13 @@ DATA: product.metafields.psrestful.minimum_quantity = 25
 
 PLACEMENT: Immediately above the quantity input, below the price.
 
-COPY: "Minimum order: 25 units" — support singular "1 unit" too.
+COPY: "Minimum order: 25 units"; support singular "1 unit" too.
 
 STATES:
   1. Passive notice (min met or not yet interacted)
-  2. Error flash (user tried qty below min) — inline error in same spot
+  2. Error flash (user tried qty below min): inline error in the same spot
 
-STYLE: subtle (gray text + info icon) by default, error state uses warning color.
+STYLE: subtle (gray text plus info icon) by default, error state uses the warning color.
 ```
 
 ### Volume pricing callout / teaser
@@ -219,7 +221,7 @@ DATA INPUT: variant has 3+ tiers in psrestful.part_price_array.
   Compute: "Save up to X% when you buy N or more"
   Example from real data:
     tiers = [1:$25, 10:$22, 25:$20, 50:$18, 100:$15]
-    → "Save up to 40% when you buy 100 or more"
+    -> "Save up to 40% when you buy 100 or more"
 
 STATES:
   1. Has tiers (teaser visible)
@@ -230,25 +232,25 @@ STYLE: Small horizontal card, accent background, right-pointing CTA.
 
 ---
 
-## Step 3 — Translating mockups back to Liquid
+## Step 3: Translating mockups back to Liquid
 
-After the design is approved, come back to this skill + Shopify MCP and:
+After the design is approved, come back to this skill plus the Shopify Dev MCP and:
 
-1. **Identify the data reads** — which metafields does the mockup need? Check `metafields.md`.
-2. **Pick the implementation path** — is there an existing PromoSync theme app block (`theme-blocks.md`) that can be configured to match, or do you need custom Liquid?
+1. **Identify the data reads**: which metafields does the mockup need? Check `metafields.md`.
+2. **Pick the implementation path**: is there an existing PromoSync theme app block (`theme-blocks.md`) that can be configured to match, or do you need custom Liquid?
 3. **If custom:** base the implementation on `integration-patterns.md` and existing theme files. Reuse the theme's design tokens (`color-{{ color_scheme }}`, existing component CSS) rather than inventing new ones.
-4. **Use Shopify MCP** for platform-specific questions (correct Liquid filter for a use case, section schema for settings, event names for variant change).
+4. **Use the Shopify Dev MCP** for platform-specific questions (the correct Liquid filter for a use case, section schema for settings, event names for variant change) and to validate the Liquid you wrote.
 5. **Run `shopify theme check`** and test in dev (`shopify theme dev`) before reporting done.
 
 ---
 
 ## Anti-patterns to avoid
 
-- **Designing before confirming data shape.** Always paste the JSON example from `metafields.md` into the brief. Designers inventing field names leads to mockups that can't be built.
-- **Ignoring cents.** Nano banana pro will happily produce `$2500` instead of `$25.00`. The brief must call out "price in cents, render as dollars."
-- **Designing the discount.** The theme never applies the discount — the Shopify Function does at checkout. Don't spend design time on discount badges at checkout; focus on the cart preview.
-- **Duplicating native Shopify UI.** Shopify has a native `<quantity-price-breaks>` component. Fall back to PromoSync data only when native is empty (see `integration-patterns.md` — "Volume pricing popover").
-- **Forgetting the empty state.** Many products won't have tiers/decorations. Every brief must include an empty/absent state.
+- **Designing before confirming the data shape.** Always paste the JSON example from `metafields.md` into the brief. Designers inventing field names leads to mockups that can't be built.
+- **Ignoring cents.** Image generators will happily produce `$2500` instead of `$25.00`. The brief must call out "price in cents, render as money".
+- **Designing the discount.** The theme never applies the discount; PromoSync's Shopify Function does at checkout. Don't spend design time on discount badges at checkout; focus on the cart preview.
+- **Duplicating native Shopify UI.** Shopify has a native `<quantity-price-breaks>` component. Fall back to PromoSync data only when native is empty (see `integration-patterns.md`, "Volume pricing popover").
+- **Forgetting the empty state.** Many products won't have tiers or decorations. Every brief must include an empty or absent state.
 
 ---
 
@@ -263,9 +265,9 @@ User wants a PromoSync-aware UI component.
 │
 ├── Is the data already in a PromoSync metafield?
 │   └── YES → Reference metafields.md; write a brief with the real JSON shape.
-│   └── NO  → Data gap. Surface this to the user — they may need a PromoSync app change, not a theme change.
+│   └── NO  → Data gap. Surface this to the user; they may need a PromoSync app change, not a theme change.
 │
-├── Ask design tool for mockups using the brief + prompt template.
+├── Ask the design tool for mockups using the brief plus prompt template.
 │
-└── Translate mockup → Liquid using integration-patterns.md + Shopify MCP for platform details.
+└── Translate mockup → Liquid using integration-patterns.md plus the Shopify Dev MCP for platform details.
 ```

@@ -1,5 +1,6 @@
 {
   "name": "promosync",
+  "version": "1.1.0",
   "description": "Build Shopify themes on PromoSync data: metafields, theme app blocks, tier pricing, decorations, minimum quantities.",
   "author": {
     "name": "PSRESTful"
