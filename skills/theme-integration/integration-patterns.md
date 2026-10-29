@@ -3,10 +3,10 @@
 Battle-tested Liquid and JS snippets for reading PromoSync metafields in theme code. Use these when the theme-provided app blocks don't fit (custom UI, cart-level logic, JSON endpoints, etc.).
 
 Typical theme files where these patterns land:
-- `sections/main-cart-items.liquid` — cart line pricing + volume popover
-- `snippets/cart-drawer.liquid` — drawer pricing + volume popover
-- `sections/main-cart-footer.liquid` — adjusted cart total
-- `sections/main-product.liquid` — product-page volume pricing display
+- `sections/main-cart-items.liquid`, cart line pricing + volume popover
+- `snippets/cart-drawer.liquid`, drawer pricing + volume popover
+- `sections/main-cart-footer.liquid`, adjusted cart total
+- `sections/main-product.liquid`, product-page volume pricing display
 
 ---
 
@@ -30,19 +30,80 @@ Typical theme files where these patterns land:
 ```
 
 Rules:
-- `price` is in **cents** — render with `{{ matched_tier_price | money_without_currency }}`, never divide by 100.
+- `price` is in **integer cents in the store's currency**. Render with `{{ matched_tier_price | money }}`; never divide by 100 and never write a literal currency symbol in front of `money_without_currency`.
 - Tiers are ascending; the **last** match wins.
-- `ps_price_breaks` is a Liquid array of objects (the `.value` filter unwraps the JSON metafield).
+- `ps_price_breaks` is a Liquid array of objects (`.value` unwraps the JSON metafield).
+- `target_quantity` must follow the store's volume pricing mode (next section).
+
+### Match the store's volume pricing mode
+
+PromoSync's Quantity Price Breaks Function has a **Mode** setting (PromoSync > Shop Settings > Volume Pricing):
+
+| Mode | Tier quantity at checkout |
+|---|---|
+| **Per variant** (default) | The cart line's own quantity |
+| **Combined by product** | The sum of every cart line that shares the same parent product (all sizes and colors) |
+
+Buyers in promotional apparel expect sizes of one style to count together (48 shirts split S/M/L/XL reach the 48+ break), which is what Combined by product gives them. Whatever the merchant picks, the theme must compute the same quantity, or the cart shows one price and checkout charges another. There is no shop metafield for the mode, so add a theme setting the merchant sets once to match PromoSync (`config/settings_schema.json`):
+
+```json
+{
+  "name": "PromoSync",
+  "settings": [
+    {
+      "type": "select",
+      "id": "promosync_volume_mode",
+      "label": "Volume pricing mode",
+      "info": "Match PromoSync > Shop Settings > Volume Pricing > Mode.",
+      "options": [
+        { "value": "variant", "label": "Per variant" },
+        { "value": "product", "label": "Combined by product" }
+      ],
+      "default": "variant"
+    }
+  ]
+}
+```
+
+Then compute the tier quantity for a cart line like this, and use `tier_qty` wherever a snippet matches a tier:
+
+```liquid
+{%- liquid
+  assign tier_qty = item.quantity
+  if settings.promosync_volume_mode == 'product'
+    assign tier_qty = 0
+    for line in cart.items
+      if line.product.id == item.product.id
+        assign tier_qty = tier_qty | plus: line.quantity
+      endif
+    endfor
+  endif
+-%}
+```
+
+On the product page in Combined by product mode, the quantity that decides the tier is the input value plus what the cart already holds for the same product. The `cart` object is available in product templates, so the same loop works there with `product.id`, and the JS further down adds the cart sum before matching a tier.
+
+Combined by product applies to decoration charge lines too: lines that share a canonical charge product are summed. Keep run-charge lines at the product quantity (see "Multi-line cart-add").
 
 ### Cart line: show discounted unit price when tier matched
 
 ```liquid
 {%- liquid
+  assign tier_qty = item.quantity
+  if settings.promosync_volume_mode == 'product'
+    assign tier_qty = 0
+    for line in cart.items
+      if line.product.id == item.product.id
+        assign tier_qty = tier_qty | plus: line.quantity
+      endif
+    endfor
+  endif
+
   assign ps_breaks = item.variant.metafields.psrestful.part_price_array.value
   assign matched_tier_price = nil
   if ps_breaks.size > 0
     for tier in ps_breaks
-      if item.quantity >= tier.quantityMin
+      if tier_qty >= tier.quantityMin
         assign matched_tier_price = tier.price
       endif
     endfor
@@ -58,7 +119,7 @@ Rules:
   <div class="cart-item__discounted-prices">
     <s class="cart-item__old-price product-option">{{ item.original_price | money }}</s>
     <strong class="cart-item__final-price product-option">
-      ${{ matched_tier_price | money_without_currency }}
+      {{ matched_tier_price | money }}
     </strong>
   </div>
 {%- else -%}
@@ -90,7 +151,7 @@ Rules:
         {%- for tier in psrestful_price_breaks -%}
           <li>
             <span>{{ tier.quantityMin }}<span aria-hidden="true">+</span></span>
-            <span>${{ tier.price | money_without_currency }}/ea</span>
+            <span>{{ tier.price | money }}/ea</span>
           </li>
         {%- endfor -%}
       </ul>
@@ -107,12 +168,22 @@ Use this in `main-cart-footer.liquid`. The Shopify Function applies the actual d
 {%- liquid
   assign adjusted_total = 0
   for item in cart.items
+    assign tier_qty = item.quantity
+    if settings.promosync_volume_mode == 'product'
+      assign tier_qty = 0
+      for line in cart.items
+        if line.product.id == item.product.id
+          assign tier_qty = tier_qty | plus: line.quantity
+        endif
+      endfor
+    endif
+
     assign ps_breaks = item.variant.metafields.psrestful.part_price_array.value
     assign tier_match = nil
 
     if ps_breaks.size > 0
       for tier in ps_breaks
-        if item.quantity >= tier.quantityMin
+        if tier_qty >= tier.quantityMin
           assign tier_match = tier.price
         endif
       endfor
@@ -131,7 +202,7 @@ Use this in `main-cart-footer.liquid`. The Shopify Function applies the actual d
 <div class="totals">
   <h2 class="totals__total">{{ 'sections.cart.estimated_total' | t }}</h2>
   {%- if adjusted_total != cart.total_price -%}
-    <p class="totals__total-value">${{ adjusted_total | money_without_currency }} {{ cart.currency.iso_code }}</p>
+    <p class="totals__total-value">{{ adjusted_total | money_with_currency }}</p>
   {%- else -%}
     <p class="totals__total-value">{{ cart.total_price | money_with_currency }}</p>
   {%- endif -%}
@@ -154,16 +225,24 @@ Use this in `main-cart-footer.liquid`. The Shopify Function applies the actual d
 
 <div id="variant-data"
      data-variant-id="{{ current_variant.id }}"
+     data-product-id="{{ product.id }}"
+     data-shop-currency="{{ shop.currency }}"
+     data-volume-mode="{{ settings.promosync_volume_mode | default: 'variant' }}"
      data-variants-price-breaks="{{ variant_price_breaks | escape }}">
 </div>
 ```
 
 ```js
+const variantData = document.querySelector('#variant-data');
+const money = new Intl.NumberFormat(document.documentElement.lang || 'en', {
+  style: 'currency', currency: variantData.dataset.shopCurrency,
+});
+const formatCents = cents => money.format(cents / 100);   // tier cents are in the store currency
+
 function updateVariantPricing(newVariant) {
-  const el = document.querySelector("#variant-data");
-  const data = JSON.parse(el.getAttribute("data-variants-price-breaks"));
+  const data = JSON.parse(variantData.getAttribute('data-variants-price-breaks'));
   const tiers = data[newVariant.id];
-  if (tiers && tiers.length > 0) renderVolumePricing(tiers);
+  if (tiers && tiers.length > 0) renderVolumePricing(tiers, formatCents);
 }
 
 function matchTier(tiers, qty) {
@@ -171,6 +250,33 @@ function matchTier(tiers, qty) {
   for (const t of tiers) if (qty >= t.quantityMin) best = t;
   return best;
 }
+
+// Combined by product: the quantity that decides the tier includes what the cart already
+// holds for this product. Await this before matchTier when the mode is 'product'.
+async function tierQuantity(inputQty) {
+  if (variantData.dataset.volumeMode !== 'product') return inputQty;
+  const cart = await (await fetch('/cart.js')).json();
+  const productId = Number(variantData.dataset.productId);
+  const inCart = cart.items.filter(i => i.product_id === productId).reduce((n, i) => n + i.quantity, 0);
+  return inputQty + inCart;
+}
+```
+
+### Currency
+
+`part_price_array`, `blank_part_price_array`, `sample_price` and the decoration ladders are integer cents in the **store's base currency** (`shop.currency`). Shopify Markets converts `variant.price`, `item.original_price` and `cart.total_price` into the buyer's presentment currency, but never converts metafield values. So on a multi-currency store (a Canadian distributor selling in CAD and USD, for example):
+
+- Render tier cents with `money` only when `cart.currency.iso_code == shop.currency`. Otherwise either hide the PromoSync tier math and let the native price and the checkout discount speak, or label the tier table as being in the base currency.
+- Never compare tier cents with `item.original_price` or `variant.price` in a presentment currency; the numbers are in different units.
+- The JS formatter above must use `shop.currency`, not `cart.currency`, for the same reason.
+- Confirm the Quantity Price Breaks discount on a test checkout in each presentment currency before promising it.
+
+```liquid
+{%- if cart.currency.iso_code == shop.currency -%}
+  {%- comment -%} PromoSync tier table, cart line tier price, adjusted total {%- endcomment -%}
+{%- else -%}
+  <span class="price">{{ item.original_price | money }}</span>
+{%- endif -%}
 ```
 
 ---
@@ -201,7 +307,7 @@ function matchTier(tiers, qty) {
 
 ### Enforcement
 
-The PromoSync Pricing Engine embed block (`MinQuantityHandler`) enforces the minimum on the input client-side. If you're building a custom quantity component, replicate that logic:
+The PromoSync Pricing Engine embed enforces the minimum on the input client-side. If you're building a custom quantity component, replicate that logic:
 
 ```js
 const min = parseInt(inputEl.dataset.min || "1", 10);
@@ -212,11 +318,11 @@ inputEl.addEventListener("change", () => {
 
 ---
 
-## Location decorations — display only (`psrestful.location_decorations`)
+## Location decorations, display only (`psrestful.location_decorations`)
 
 > These patterns render decoration **names** and write `properties[Location]` / `properties[Decoration]`.
 > They do **not** price the decoration. For setup / run / extra-color / extra-location / PMS pricing and
-> multi-line cart-add, use the enriched `*VariantId` fields — see "Decoration pricing (v3 enriched
+> multi-line cart-add, use the enriched `*VariantId` fields; see "Decoration pricing (enriched
 > `location_decorations`)" below and `decoration-pricing.md`.
 
 ### Read in Liquid
@@ -231,7 +337,7 @@ inputEl.addEventListener("change", () => {
         <li>
           {{ deco.decorationName }}
           {%- if deco.maxImprintColors %} (up to {{ deco.maxImprintColors }} colors){%- endif -%}
-          {%- if deco.priceIncludes %} — included{%- else %} — additional charge{%- endif -%}
+          {%- if deco.priceIncludes %}, included{%- else %}, additional charge{%- endif -%}
         </li>
       {%- endfor -%}
     </ul>
@@ -269,7 +375,7 @@ locationSelect.addEventListener("change", () => {
     opt.value = d.decorationName;
     opt.textContent = d.decorationName +
       (d.maxImprintColors ? ` (${d.maxImprintColors} colors)` : "") +
-      (d.priceIncludes ? "" : " — additional charge");
+      (d.priceIncludes ? "" : ", additional charge");
     if (d.default) opt.selected = true;
     decorationSelect.appendChild(opt);
   }
@@ -281,27 +387,29 @@ The values end up as `properties[Location]` and `properties[Decoration]` on cart
 
 ---
 
-## Decoration pricing (v3 enriched `location_decorations`)
+## Decoration pricing (enriched `location_decorations`)
 
-When PromoSync's decoration **enricher** has run, each decoration entry carries `*VariantId` GIDs pointing
-at canonical decoration-product variants. The theme follows them to compute **setup + run + extra-color +
-extra-location + PMS** and adds one cart line per applicable charge. Full model + field reference:
-`decoration-pricing.md`. Below is the JS skeleton.
+When PromoSync's **Location Decorations Enrichment** job has run, each decoration entry carries `*VariantId`
+GIDs pointing at canonical decoration-product variants. The theme follows them to compute setup, run,
+extra-color, extra-location and PMS charges and adds one cart line per applicable charge. Full model and
+field reference: `decoration-pricing.md`. Below is the JS skeleton.
 
-**The shipped `location-decorations` block does not do this** — it's custom code. Run charges use the
-variant's `psrestful.part_price_array` (integer cents); the rest use the variant's scalar `price`.
+**The shipped `location-decorations` block does not do this**; it's custom code. Run charges use the
+variant's `psrestful.part_price_array` (integer cents) and setup tiers use `psrestful.setup_tier_array`; the
+rest use the variant's scalar `price`.
 
 ### Kind map + handle suffixes
 
 ```js
 const KIND_FIELDS = [
-  'setupFeeVariantId', 'runChargeVariantId',
+  'setupFeeVariantId', 'setupTierVariantId', 'runChargeVariantId',
   'extraColorSetupVariantId', 'extraColorRunVariantId',
   'extraLocationSetupVariantId', 'extraLocationRunVariantId',
   'pmsMatchVariantId',
 ];
 const KIND_HANDLE_SUFFIX = {
   setupFeeVariantId:           '-setup-fee',
+  setupTierVariantId:          '-setup-tier',
   runChargeVariantId:          '-run-charge',
   extraColorSetupVariantId:    '-extra-color-setup',
   extraColorRunVariantId:      '-extra-color-run',
@@ -320,28 +428,30 @@ const numericId = gid => Number(gid.split('/').pop());
 const defaultCache = new Map(); // key: handle → resolved variant (or null)
 
 async function resolveVariant(dec, field) {
-  if (dec[field]) return { gid: dec[field] };           // per-product pricing — preferred
+  if (dec[field]) return { gid: dec[field] };           // per-product pricing, preferred
 
   const handle = slugify(dec.decorationName) + KIND_HANDLE_SUFFIX[field];
   if (defaultCache.has(handle)) return defaultCache.get(handle);
 
   const data = await sf(`
     query ($handle: String!) {
-      productByHandle(handle: $handle) {
+      product(handle: $handle) {
         metafield(namespace: "psrestful", key: "default_variant_id") {
           reference { ... on ProductVariant {
             id
             price { amount }
-            metafield(namespace: "psrestful", key: "part_price_array") { value }
+            partPrices: metafield(namespace: "psrestful", key: "part_price_array") { value }
+            setupTiers: metafield(namespace: "psrestful", key: "setup_tier_array") { value }
           } }
         }
       }
     }`, { handle });
 
-  const ref = data?.productByHandle?.metafield?.reference || null;
+  const ref = data?.product?.metafield?.reference || null;
   const resolved = ref
     ? { gid: ref.id, priceCents: Math.round(parseFloat(ref.price.amount) * 100),
-        ladder: ref.metafield ? JSON.parse(ref.metafield.value) : null }
+        ladder: ref.partPrices ? JSON.parse(ref.partPrices.value) : null,
+        setupLadder: ref.setupTiers ? JSON.parse(ref.setupTiers.value) : null }
     : null;                                              // no default → charge doesn't apply
   defaultCache.set(handle, resolved);
   return resolved;
@@ -357,14 +467,23 @@ function tierPriceCents(ladder, qty) {
   return chosen.price;                                   // integer cents
 }
 
-// `prices` = { setupFeeVariantId: {priceCents}, runChargeVariantId: {priceCents, ladder}, ... }
+// `prices` = { setupFeeVariantId: {priceCents}, setupTierVariantId: {priceCents, setupLadder},
+//              runChargeVariantId: {priceCents, ladder}, ... }
 // resolved earlier via resolveVariant() (skip any kind that resolved to null).
-function decorationTotalCents(prices, { qty, chosenColors, includedColors, chosenLocations, decorationsIncluded, pmsColors }) {
+function decorationTotalCents(prices, { qty, chosenColors, includedColors, chosenLocations, decorationsIncluded, pmsColors, stitches }) {
   const extrasColors = Math.max(0, chosenColors - includedColors);
   const extrasLocs   = Math.max(0, chosenLocations - decorationsIncluded);
   const at = f => prices[f] ? prices[f].priceCents : 0;
   let total = 0;
-  total += at('setupFeeVariantId');                                          // ×1
+  if (prices.setupTierVariantId && prices.setupTierVariantId.setupLadder) {
+    const { uom, tiers } = prices.setupTierVariantId.setupLadder;            // one-time, by colors or stitches
+    const units = uom === 'Stitches' ? (stitches || 0) : chosenColors;
+    let chosen = tiers[0];
+    for (const t of tiers) { if (t.minUnits <= units) chosen = t; else break; }
+    total += chosen.price;
+  } else {
+    total += at('setupFeeVariantId');                                        // ×1, flat
+  }
   if (prices.runChargeVariantId)
     total += tierPriceCents(prices.runChargeVariantId.ladder, qty) * qty;    // per unit
   total += at('extraColorSetupVariantId')    * extrasColors;                 // one-time
@@ -381,21 +500,31 @@ If `dec.priceIncludes === true`, skip the setup/run terms (extras/PMS may still 
 
 ### Multi-line cart-add
 
+One cart line per charge, every charge line tied to the product line through `_promosync_parent`. Per-extra
+run charges get one line per extra color or location at the product quantity, kept apart by
+`_promosync_unit` (Shopify merges lines whose variant and properties are identical).
+
 ```js
-async function addDecoratedToCart({ physicalVariantId, dec, prices, qty, extrasColors, extrasLocs, pmsColors }) {
-  const items = [{ id: physicalVariantId, quantity: qty }];
+async function addDecoratedToCart({ physicalVariantId, dec, prices, qty, extrasColors, extrasLocs, pmsColors, selection }) {
+  const link = (charge, extra) => ({
+    _promosync_parent: physicalVariantId,
+    _promosync_charge: charge,
+    ...(extra ? { _promosync_unit: extra } : {}),
+  });
+  const items = [{ id: physicalVariantId, quantity: qty, properties: selection }]; // Location, Decoration, Colors…
   const push = (field, quantity, props) => {
-    if (prices[field] && quantity > 0) items.push({ id: numericId(prices[field].gid), quantity, ...(props ? { properties: props } : {}) });
+    if (prices[field] && quantity > 0) items.push({ id: numericId(prices[field].gid), quantity, properties: props });
   };
   if (!dec.priceIncludes) {
-    push('setupFeeVariantId', 1);
-    push('runChargeVariantId', qty); // tier price enforced at checkout via cart-transform Function/draft order
+    if (prices.setupTierVariantId) push('setupTierVariantId', 1, link('setup_tier'));
+    else push('setupFeeVariantId', 1, link('setup_fee'));
+    push('runChargeVariantId', qty, link('run_charge'));   // same quantity as the product line, always
   }
-  push('extraColorSetupVariantId', extrasColors);
-  push('extraColorRunVariantId', extrasColors * qty);
-  push('extraLocationSetupVariantId', extrasLocs);
-  push('extraLocationRunVariantId', extrasLocs * qty);
-  push('pmsMatchVariantId', pmsColors);
+  push('extraColorSetupVariantId', extrasColors, link('extra_color_setup'));
+  for (let n = 1; n <= extrasColors; n++) push('extraColorRunVariantId', qty, link('extra_color_run', n + 1));
+  push('extraLocationSetupVariantId', extrasLocs, link('extra_location_setup'));
+  for (let n = 1; n <= extrasLocs; n++) push('extraLocationRunVariantId', qty, link('extra_location_run', n + 1));
+  push('pmsMatchVariantId', pmsColors, link('pms_match'));
 
   await fetch('/cart/add.js', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -404,21 +533,77 @@ async function addDecoratedToCart({ physicalVariantId, dec, prices, qty, extrasC
 }
 ```
 
-**Caveat:** `/cart/add.js` charges the run-charge variant's headline (qty-1) price. Enforce the real tier
-with a cart-transform Shopify Function (read `part_price_array`, override line price) or a draft order. A
-pure-Liquid theme shows the correct tier price but charges the headline — reconcile at order time.
+**What checkout charges.** With **Enable Volume Pricing** on in PromoSync, the Quantity Price Breaks
+Function discounts the run-charge line to its tier (the run-charge variant carries `part_price_array`), on
+any Shopify plan. With it off, checkout charges the run-charge variant's headline (qty-1) price and the
+merchant reconciles at order time. Setup tiers (`setup_tier_array`) are display-only at checkout: a discount
+can only lower a price, so a multi-color setup is charged at the one-color price unless the merchant uses a
+draft order or adjusts the order. The flat charges are charged correctly by quantity. Details in
+`decoration-pricing.md`, section 6.
+
+### Keep charge lines in step with the product line
+
+Shopify treats every cart line as independent. Without this, a buyer who changes the tee from 144 to 200
+in the cart keeps paying run charges on 144, and a buyer who deletes the tee keeps the setup fee. Hook the
+cart page's quantity change for product lines, then update or remove the children:
+
+```js
+// Charge kinds that follow the product quantity; the rest are flat and keep their own quantity.
+const PER_UNIT = new Set(['run_charge', 'extra_color_run', 'extra_location_run']);
+
+async function syncChargeLines(parentVariantId, newQty) {
+  const cart = await (await fetch('/cart.js')).json();
+  const children = cart.items.filter(i =>
+    i.properties && String(i.properties._promosync_parent) === String(parentVariantId));
+  for (const child of children) {
+    const target = newQty === 0 ? 0
+      : (PER_UNIT.has(child.properties._promosync_charge) ? newQty : child.quantity);
+    if (target === child.quantity) continue;
+    await fetch('/cart/change.js', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: child.key, quantity: target }),
+    });
+  }
+}
+
+// Dawn-family cart items: run after the theme's own /cart/change.js call for the product line.
+document.addEventListener('change', async (e) => {
+  const input = e.target.closest('.cart-item input[name="updates[]"]');
+  if (!input) return;
+  const row = input.closest('.cart-item');
+  const variantId = row && row.dataset.variantId;   // add data-variant-id="{{ item.variant_id }}" to the row
+  if (variantId) await syncChargeLines(variantId, parseInt(input.value, 10) || 0);
+});
+```
+
+In the cart Liquid, render charge lines under their product and without quantity controls, so the only way
+to change a charge is through the product line:
+
+```liquid
+{%- if item.properties._promosync_parent -%}
+  <li class="cart-item cart-item--charge">
+    <span class="cart-item__name">{{ item.product.title }}</span>
+    <span class="cart-item__qty">{{ item.quantity }} × {{ item.original_price | money }}</span>
+  </li>
+{%- else -%}
+  {%- comment -%} the theme's normal cart line with its quantity input {%- endcomment -%}
+{%- endif -%}
+```
+
+`item.properties._promosync_parent` is readable in Liquid even though the underscore hides the property from
+Dawn's default property list and from checkout.
 
 ---
 
-## Variant gallery (`psrestful.gallery`) — gated feature
+## Variant gallery (`psrestful.gallery`), gated feature
 
-**Important:** This metafield is **only present on paid PromoSync plans** (Trial, Business, Enterprise) for shops **not** using the `by_color` variant grouping strategy. On all other shops the metafield is empty/nil and the theme must fall back to native Shopify media.
+**Important:** This metafield is present only on PromoSync plans that include the per-variant gallery (Trial, Business and Enterprise) and only when **Variant Grouping** is One Product (All Variants), not Split by Color. On all other shops the metafield is empty and the theme must fall back to native Shopify media.
 
 The design principle:
 
 > Treat `psrestful.gallery` as a progressive enhancement. If it's there, you can give shoppers a true per-variant gallery (e.g., 6 images of the Red variant from every angle, swapping to 6 images of the Blue variant on selection). If it's not, fall back to `product.media` + `variant.featured_media` and the page still looks fine.
 
-Each entry in the list is a Shopify File object — typically a `MediaImage` (use `.image`). The first entry is the variant's featured image (same as `variant.featured_media`); subsequent entries are additional color-matched media, deduped.
+Each entry in the list is a Shopify File object, typically a `MediaImage` (use `.image`). The first entry is the variant's featured image (same as `variant.featured_media`); subsequent entries are additional color-matched media, deduped.
 
 ### Detect availability + render
 
@@ -432,7 +617,7 @@ Each entry in the list is a Shopify File object — typically a `MediaImage` (us
 -%}
 
 {%- if has_variant_gallery -%}
-  {%- comment %} Gated feature available — render per-variant gallery {%- endcomment -%}
+  {%- comment %} Gated feature available, render per-variant gallery {%- endcomment -%}
   <ul class="product__gallery product__gallery--variant" data-source="psrestful">
     {%- for media in vg -%}
       {%- if media.image -%}
@@ -458,6 +643,8 @@ Each entry in the list is a Shopify File object — typically a `MediaImage` (us
       <li class="product__gallery-item">
         <img src="{{ variant.featured_media | image_url: width: 1200 }}"
              alt="{{ variant.featured_media.alt | escape }}"
+             width="{{ variant.featured_media.preview_image.width }}"
+             height="{{ variant.featured_media.preview_image.height }}"
              loading="eager" fetchpriority="high">
       </li>
     {%- endif -%}
@@ -467,7 +654,8 @@ Each entry in the list is a Shopify File object — typically a `MediaImage` (us
       {%- endif -%}
       {%- if media.media_type == 'image' -%}
         <li class="product__gallery-item">
-          <img src="{{ media | image_url: width: 1200 }}" alt="{{ media.alt | escape }}" loading="lazy">
+          <img src="{{ media | image_url: width: 1200 }}" alt="{{ media.alt | escape }}"
+               width="{{ media.preview_image.width }}" height="{{ media.preview_image.height }}" loading="lazy">
         </li>
       {%- endif -%}
     {%- endfor -%}
@@ -477,7 +665,7 @@ Each entry in the list is a Shopify File object — typically a `MediaImage` (us
 
 ### Variant switching: dump all variants' galleries to JSON
 
-Lets JS replace the gallery instantly on variant change, without an HTTP round-trip. **Skip the JSON dump entirely when no variant has a gallery** — keeps the payload small for free-tier shops.
+Lets JS replace the gallery instantly on variant change, without an HTTP round-trip. **Skip the JSON dump entirely when no variant has a gallery**, keeps the payload small for free-tier shops.
 
 ```liquid
 {%- liquid
@@ -520,7 +708,7 @@ const galleriesEl = document.getElementById('ps-variant-galleries');
 const galleries = galleriesEl ? JSON.parse(galleriesEl.textContent) : null;
 
 function renderVariantGallery(variantId) {
-  if (!galleries) return false; // feature not present — let native gallery handle it
+  if (!galleries) return false; // feature not present, let native gallery handle it
   const items = galleries[variantId];
   if (!items || items.length === 0) return false;
 
@@ -545,27 +733,29 @@ document.addEventListener('variant:change', (e) => {
 
 1. **Always check `.size > 0` before iterating.** When the gate is closed, `.value` is nil and `.size` is 0; iterating is safe but rendering empty `<ul>` is ugly.
 2. **Don't compare against `product.media` count to "detect" the feature.** Use the metafield itself. A free-tier shop with 10 native media files is not the same as a paid-tier shop with 10 variant-gallery entries.
-3. **Index 0 of the gallery is already the variant's featured image** — don't render `variant.featured_media` *and* the full gallery, you'll double up. If you want a hero+thumbnails layout, treat `gallery[0]` as the hero and `gallery[1..]` as thumbnails.
+3. **Index 0 of the gallery is already the variant's featured image**, don't render `variant.featured_media` *and* the full gallery, you'll double up. If you want a hero+thumbnails layout, treat `gallery[0]` as the hero and `gallery[1..]` as thumbnails.
 4. **`list.file_reference` can technically hold non-image files** (PromoSync currently only writes images, but Liquid doesn't enforce it). Use `if media.image` as a type guard before treating it as an image.
 5. **Storefront access must be enabled** on the metafield definition for the theme to read it. If you see no data on a known-paid-tier shop, that's the first thing to check.
-6. **`by_color` shops never get this metafield, even on paid tiers** — because each color is already a separate product. Don't surprise the merchant by promising a per-variant gallery; if their grouping strategy is `by_color`, the fallback path is what they'll always see.
-7. **Gallery contents are supplier-specific** — the list is built by a `MediaAssociationStrategy` chosen by `supplier_code`. SanMar / S&S cascade through partId → color → fallback color (typically rich); HIT uses partId only (typically sparser); unmapped suppliers run the default cascade. So an "empty gallery on a paid-tier shop" can be legitimate (supplier didn't tag the media that way) rather than a bug. See `metafields.md` → "Media association strategies" for the full table.
+6. **Split by Color shops never get this metafield, even on qualifying plans**, because each color is already a separate product. Don't promise a per-variant gallery to a merchant on that grouping; the fallback path is what they'll always see.
+7. **Gallery contents are supplier-specific.** PromoSync matches media by part id first, then by color; for suppliers whose media is tagged by part id only it never falls back to color, so those galleries are shorter. An empty gallery on a qualifying shop can be legitimate (the supplier didn't tag the media that way) rather than a bug. See `metafields.md`, "How PromoSync matches supplier media to variants".
 
 ---
 
 ## Blank / Decorated / Sample purchase flows (gated trio)
 
-**Important:** The blank/sample metafields (`blank_minimum_quantity`, `blank_part_price_array`, `sample_price`) are **only present on shops where `Shop.emit_blank_sample_metafields == true`** — that is, `enable_blank_sample_sales=true` AND `default_configuration_type='Decorated'`. On Blank-default shops the regular `minimum_quantity`/`part_price_array` already *are* the blank values, so the duplicate `blank_*` namespace isn't emitted.
+**Important:** The blank/sample metafields (`blank_minimum_quantity`, `blank_part_price_array`, `sample_price`) are present only on shops where PSRESTful support has enabled **Blank / Sample Sales** and the **Default Configuration Type** is Decorated. On Blank-default shops the regular `minimum_quantity` and `part_price_array` already are the blank values, so the `blank_*` keys aren't written.
+
+**Checkout limitation, read before building this:** PromoSync's Quantity Price Breaks Function reads only `part_price_array`, so **Blank and Sample lines are charged at the variant's Shopify price at checkout**, not at the blank tier or sample price the theme shows. A store that takes payment at checkout should keep Blank and Sample as quote or request flows, or adjust the price at order processing, and the merchant must know this before the selector goes live.
 
 The pattern below lets a theme offer three purchase modes side-by-side on a single product page:
 
 | Mode | Min qty source | Tier pricing source | Single-unit shortcut |
 |---|---|---|---|
-| **Decorated** (always available) | `product.metafields.psrestful.minimum_quantity` | `variant.metafields.psrestful.part_price_array` | n/a — decoration mins are typically ≥ 6 |
+| **Decorated** (always available) | `product.metafields.psrestful.minimum_quantity` | `variant.metafields.psrestful.part_price_array` | n/a, decoration mins are typically ≥ 6 |
 | **Blank** (gated) | `product.metafields.psrestful.blank_minimum_quantity` | `variant.metafields.psrestful.blank_part_price_array` | n/a |
-| **Sample** (gated, conditional) | always 1 | n/a — single unit | `variant.metafields.psrestful.sample_price` (cents) |
+| **Sample** (gated, conditional) | always 1 | n/a, single unit | `variant.metafields.psrestful.sample_price` (cents) |
 
-The Sample mode is only valid when `sample_price` is present — that flag means the supplier offers a qty-1 blank tier. If `sample_price` is nil, do not render the Sample option.
+The Sample mode is only valid when `sample_price` is present, that flag means the supplier offers a qty-1 blank tier. If `sample_price` is nil, do not render the Sample option.
 
 ### Feature-detect the gate
 
@@ -589,7 +779,7 @@ The Sample mode is only valid when `sample_price` is present — that flag means
 -%}
 ```
 
-Use `supports_blank` / `supports_sample` to conditionally render those tabs/buttons. **Never assume the gate is open** — always check.
+Use `supports_blank` / `supports_sample` to conditionally render those tabs/buttons. **Never assume the gate is open**, always check.
 
 ### Three-mode selector (cards/radios)
 
@@ -619,14 +809,14 @@ Use `supports_blank` / `supports_sample` to conditionally render those tabs/butt
              data-min-qty="1" data-mode="sample" data-sample-price="{{ sample_cents }}">
       <span class="config-type-option__title">Sample</span>
       <span class="config-type-option__hint">
-        Single unit, blank · ${{ sample_cents | money_without_currency }}
+        Single unit, blank · {{ sample_cents | money }}
       </span>
     </label>
   {%- endif -%}
 </fieldset>
 ```
 
-The `properties[Configuration]` line item property is what flows into cart, checkout, order admin, and order emails. Pick whatever convention the merchant prefers (`Mode`, `Type`, etc.); keep it consistent across the theme. Hide the location-decorations block when mode is `Blank` or `Sample` — there's nothing to decorate.
+The `properties[Configuration]` line item property is what flows into cart, checkout, order admin, and order emails. Pick whatever convention the merchant prefers (`Mode`, `Type`, etc.); keep it consistent across the theme. Hide the location-decorations block when mode is `Blank` or `Sample`, there's nothing to decorate.
 
 ### Per-mode price + min-qty update on selection
 
@@ -634,6 +824,9 @@ The `properties[Configuration]` line item property is what flows into cart, chec
 const selector = document.querySelector('[data-config-selector]');
 const qtyInput = document.querySelector('input[name="quantity"]');
 const priceEl  = document.querySelector('[data-product-price]');
+const money    = new Intl.NumberFormat(document.documentElement.lang || 'en', {
+  style: 'currency', currency: {{ shop.currency | json }},   // tier cents are in the store currency
+});
 
 // Cached tier arrays for the active variant; refresh on variant change.
 let tiers = {
@@ -668,7 +861,7 @@ selector.addEventListener('change', (e) => {
     if (t) unitCents = t.price;
   }
   if (unitCents != null) {
-    priceEl.textContent = '$' + (unitCents / 100).toFixed(2);
+    priceEl.textContent = money.format(unitCents / 100);
   }
 });
 ```
@@ -677,12 +870,22 @@ selector.addEventListener('change', (e) => {
 
 ### Cart line: render the right price per configuration
 
-The Shopify Function (`quantity-price-breaks`) only knows about `psrestful.part_price_array`. **It does not apply the blank or sample price at checkout.** For Blank/Sample line items, the merchant must use a different mechanism (manual price override at order processing, or a separate Shopify Function variant — outside scope of this skill).
+The Quantity Price Breaks Function only knows about `psrestful.part_price_array`. **It does not apply the blank or sample price at checkout**, so Blank and Sample lines are charged at the variant's Shopify price. The merchant adjusts the price at order processing, or keeps these modes as quote or request flows. The theme's role is display plus line item property tagging.
 
 For the theme's *visual* cart display, branch on the line item's `Configuration` property:
 
 ```liquid
 {%- liquid
+  assign tier_qty = item.quantity
+  if settings.promosync_volume_mode == 'product'
+    assign tier_qty = 0
+    for line in cart.items
+      if line.product.id == item.product.id
+        assign tier_qty = tier_qty | plus: line.quantity
+      endif
+    endfor
+  endif
+
   assign cfg = item.properties['Configuration']
   assign unit_cents = nil
 
@@ -691,15 +894,17 @@ For the theme's *visual* cart display, branch on the line item's `Configuration`
   elsif cfg == 'Blank'
     assign blank_tiers = item.variant.metafields.psrestful.blank_part_price_array.value
     for tier in blank_tiers
-      if item.quantity >= tier.quantityMin
+      if tier_qty >= tier.quantityMin
         assign unit_cents = tier.price
       endif
     endfor
   else
-    {%- comment %} Decorated (default) — use the standard tier match {%- endcomment -%}
+    comment
+      Decorated (default): the standard tier match
+    endcomment
     assign dec_tiers = item.variant.metafields.psrestful.part_price_array.value
     for tier in dec_tiers
-      if item.quantity >= tier.quantityMin
+      if tier_qty >= tier.quantityMin
         assign unit_cents = tier.price
       endif
     endfor
@@ -707,7 +912,7 @@ For the theme's *visual* cart display, branch on the line item's `Configuration`
 -%}
 
 {%- if unit_cents -%}
-  <strong class="cart-item__unit">${{ unit_cents | money_without_currency }}/ea</strong>
+  <strong class="cart-item__unit">{{ unit_cents | money }}/ea</strong>
   {%- if cfg and cfg != 'Decorated' -%}
     <span class="cart-item__config-badge cart-item__config-badge--{{ cfg | downcase }}">{{ cfg }}</span>
   {%- endif -%}
@@ -718,19 +923,19 @@ For the theme's *visual* cart display, branch on the line item's `Configuration`
 
 ### Sample-mode-specific UX
 
-- **Force quantity to 1 and disable the qty input** when the Sample radio is selected — anything > 1 isn't Sample, it's Blank-tier-1.
+- **Force quantity to 1 and disable the qty input** when the Sample radio is selected, anything > 1 isn't Sample, it's Blank-tier-1.
 - **Render `sample_price` directly on the selector card** (as in the radio markup above) so the customer sees the exact cost before clicking.
-- **Hide volume pricing UI** (tier table, "save more in bulk" callouts) when Sample is selected — irrelevant for a single-unit order.
-- **Add a short helper string** like "Single-unit blank for evaluation — no minimum, no decoration" so customers understand what Sample means in this context.
+- **Hide volume pricing UI** (tier table, "save more in bulk" callouts) when Sample is selected, irrelevant for a single-unit order.
+- **Add a short helper string** like "Single-unit blank for evaluation, no minimum, no decoration" so customers understand what Sample means in this context.
 
 ### Gotchas
 
-1. **Always feature-detect both gates separately.** `supports_blank` does not imply `supports_sample` — a product can have a blank tier array starting at qty 6, in which case blank is offered but sample is not. The codebase enforces this: `sample_price` is only written when `blank_part_price_array`'s lowest `quantityMin == 1`.
+1. **Always feature-detect both gates separately.** `supports_blank` does not imply `supports_sample`, a product can have a blank tier array starting at qty 6, in which case blank is offered but sample is not. PromoSync only writes `sample_price` when the lowest tier of `blank_part_price_array` has `quantityMin == 1`.
 2. **Don't fabricate a sample price** from the cheapest blank tier when `sample_price` is nil. If the supplier didn't offer qty-1, the merchant can't fulfill it.
-3. **`part_price_array` semantics differ across shops.** On a Decorated-default shop with the gate open, `part_price_array` = decorated tiers and `blank_part_price_array` = blank tiers. On any other shop, `part_price_array` already *is* the blank tiers and `blank_part_price_array` is absent. Theme code that simply reads `part_price_array` works correctly in both cases for the default mode — but blank/sample tabs must check for the metafield's existence before rendering.
-4. **The Shopify Function (`quantity-price-breaks`) does not apply blank or sample prices at checkout.** It only reads `psrestful.part_price_array`. If the merchant needs Blank/Sample lines to actually charge at those prices, that's an order-processing concern outside the theme. The theme's role is *display* + *line item property tagging*.
+3. **`part_price_array` semantics differ across shops.** On a Decorated-default shop with the gate open, `part_price_array` = decorated tiers and `blank_part_price_array` = blank tiers. On any other shop, `part_price_array` already *is* the blank tiers and `blank_part_price_array` is absent. Theme code that simply reads `part_price_array` works correctly in both cases for the default mode, but blank/sample tabs must check for the metafield's existence before rendering.
+4. **The Quantity Price Breaks Function does not apply blank or sample prices at checkout.** It only reads `psrestful.part_price_array`, so Blank and Sample lines are charged at the variant's Shopify price. Say so to the merchant before the selector goes live; the theme's role is display plus line item property tagging.
 5. **Preserve `properties[Configuration]`** through cart, checkout, and order. Order admin and order confirmation emails should show which configuration was purchased.
-6. **Decorations block must be hidden in Blank/Sample mode.** Selecting a blank with `properties[Location]=Front Chest` is a contradiction — guard against it in JS by listening for the configuration change and clearing/disabling those selects.
+6. **Decorations block must be hidden in Blank/Sample mode.** Selecting a blank with `properties[Location]=Front Chest` is a contradiction, guard against it in JS by listening for the configuration change and clearing/disabling those selects.
 
 ---
 
@@ -772,40 +977,32 @@ PromoSync links the **Color option** to per-color `custom-color-swatch` metaobje
 `psrestful.color-swatches` (`list.metaobject_reference`). See `metafields.md` →
 "Color swatches" for the full write pipeline. The theme side has two routes:
 
-**Route A — native picker.** If your theme already renders Shopify's linked-option
+**Route A, native picker.** If your theme already renders Shopify's linked-option
 swatches, nothing to do: the option is linked, swatches appear. But because the
 metaobject is a **custom** type (not Shopify's standard color/pattern), the native
-`option_value.swatch` object is **not** auto-populated — so Dawn-style
+`option_value.swatch` object is **not** auto-populated, so Dawn-style
 `{{ value.swatch.color }}` will be empty. Use Route B for a custom theme.
 
-**Route B — read the metafield directly.** Build a name→hex map from the metaobject
+**Route B, read the metafield directly.** Build a name→hex map from the metaobject
 list and match it to each Color option value by `label`.
 
-> ⚠️ **Hyphenated key:** `psrestful.color-swatches` must use bracket access —
-> `product.metafields.psrestful["color-swatches"]` — or Liquid reads the hyphen as
+> ⚠️ **Hyphenated key:** `psrestful.color-swatches` must use bracket access -
+> `product.metafields.psrestful["color-swatches"]`, or Liquid reads the hyphen as
 > minus (`color - swatches`).
 
 ```liquid
-{%- liquid
-  assign swatches = product.metafields.psrestful["color-swatches"].value
-  assign swatch_labels = '' | split: ''
-  assign swatch_hexes  = '' | split: ''
-  for swatch in swatches
-    assign swatch_labels = swatch_labels | push: swatch.label
-    assign swatch_hexes  = swatch_hexes  | push: swatch.hex_color
-  endfor
--%}
+{%- assign swatches = product.metafields.psrestful["color-swatches"].value -%}
 
 {%- for option in product.options_with_values -%}
   {%- assign oname = option.name | downcase -%}
   {%- if oname == 'color' or oname == 'colour' -%}
     <div class="color-swatches" role="radiogroup" aria-label="{{ option.name }}">
       {%- for value in option.values -%}
-        {%- comment -%} Find this value's hex by matching label {%- endcomment -%}
+        {%- comment -%} Find this value's hex by matching the swatch label (Liquid has no push filter, so loop) {%- endcomment -%}
         {%- assign hex = '' -%}
-        {%- for label in swatch_labels -%}
-          {%- if label == value.name -%}
-            {%- assign hex = swatch_hexes[forloop.index0] -%}
+        {%- for swatch in swatches -%}
+          {%- if swatch.label == value.name -%}
+            {%- assign hex = swatch.hex_color -%}
             {%- break -%}
           {%- endif -%}
         {%- endfor -%}
@@ -814,7 +1011,7 @@ list and match it to each Color option value by `label`.
           {%- if hex != blank -%}
             <span class="color-swatch__dot" style="background:{{ hex }};"></span>
           {%- else -%}
-            {%- comment -%} No swatch metaobject for this color — fall back to a label {%- endcomment -%}
+            {%- comment -%} No swatch metaobject for this color, fall back to a label {%- endcomment -%}
             <span class="color-swatch__name">{{ value.name }}</span>
           {%- endif -%}
         </label>
@@ -826,24 +1023,22 @@ list and match it to each Color option value by `label`.
 
 **Why match by `label`, not index:** option values and the metaobject list are not
 guaranteed to share order, and a color may legitimately have **no** metaobject (no
-hex from the supplier → skipped server-side). Always have the no-hex fallback —
+hex from the supplier → skipped server-side). Always have the no-hex fallback -
 don't assume every color value has a swatch.
 
-> For **this theme (kantvas)** specifically: the PDP currently fakes swatches with
-> `style="background: {{ value | downcase | replace: ' ', '' }}"` (a raw CSS-color-name
-> guess that fails for names like "Monterey Sage"). Replacing that with the snippet
-> above — gated on `product.metafields.psrestful["color-swatches"].value.count > 0`
-> with the CSS-name guess as the fallback — is the correct upgrade. Confirm the
-> store actually writes `color-swatches` first (it uses a bespoke `psrestful` schema).
+> Many themes fake swatches with `style="background: {{ value | downcase | replace: ' ', '' }}"`,
+> a CSS-color-name guess that fails for names like "Monterey Sage". Replace that with the snippet
+> above, gated on `product.metafields.psrestful["color-swatches"].value.count > 0`, and keep the
+> CSS-name guess as the fallback.
 
 ---
 
-## Marketing points (product specs) — `psrestful.marketing_points`
+## Marketing points (product specs), `psrestful.marketing_points`
 
 Raw supplier `ProductMarketingPointArray` (`[{pointType, pointCopy}]`). It is **not
 normalized**, so read `metafields.md` → "`marketing_points` (product)" for the per-supplier
 survey first. Always filter with an **allow-list** of `pointType`s. Never loop and print everything:
-PCNA alone would dump ~98 internal attributes per product.
+some suppliers send dozens of internal catalog attributes per product.
 
 ```liquid
 {%- assign points = product.metafields.psrestful.marketing_points.value -%}
@@ -896,26 +1091,24 @@ PCNA alone would dump ~98 internal attributes per product.
 ```
 
 ### Gotchas
-- **Absent is normal.** Many suppliers send nothing (BEL Promo, Magnet Group, Gold Bond,
-  Evans, Tekweld, …), and HIT/Logomark/Showdown fill it only for some products. Render nothing,
-  or fall back to `product.description`. Don't show an empty "Specifications" tab.
+- **Absent is normal.** Many suppliers send nothing, and others fill it only for some products.
+  Render nothing, or fall back to `product.description`. Don't show an empty "Specifications" tab.
 - **Use `capture` + `!= blank`** as above, so a product whose points are all filtered out
   doesn't render an empty `<ul>`/tab heading.
 - **Never print 0/1 flag types** (`Eco-Friendly`, `Woman Owned`, `PromoCares Collection`, …).
   `0` means "no".
 - **Hide `Additional Info`, `Industry`, `Price`, `NOTE`, `Compliance`, `HTS *`** by default.
   They're distributor notes, target markets, compliance and customs data.
-- **`pointType` can be `null`** (Showdown Displays). Verified 2026-10-02: Showdown always sends
-  exactly one untyped point, a ~100-char marketing tagline. That's why the snippet renders it as
-  an intro `<p>`, not a bullet. `contains` never matches `null`, so it can't leak into the list.
-- **Koozie Group's `BTH` = real bullets** (verified 2026-10-02), but ~3% start with
-  `Top markets:` (target markets for distributors), and the snippet skips those. A few mention
-  option charges ("Optional magnet available for an additional charge"). That's acceptable copy,
-  but it can conflict with how the store prices options.
+- **`pointType` can be `null`** (Showdown Displays sends exactly one untyped point, a short
+  marketing tagline). That's why the snippet renders it as an intro `<p>`, not a bullet. `contains`
+  never matches `null`, so it can't leak into the list.
+- **Koozie Group's `BTH` points are real bullets**, but a few start with `Top markets:` (notes for
+  distributors), and the snippet skips those. Some mention optional add-on charges, which is acceptable
+  copy but can conflict with how the store prices options.
 - **Liquid only.** The definition isn't storefront-exposed, so client-side Storefront API
   fetches return null. Render server-side.
-- **Imported before 2026-09-30?** The product won't have it until the merchant runs
-  **Update Metafields** on it.
+- **Imported before the metafield existed (September 2026)?** The product won't have it until the
+  merchant runs **Update Metafields** on it.
 - Unit labels live inside `pointType` (`Product Width (IN)`). Strip the suffix with
   `| remove: ' (IN)'` if you want a cleaner label.
 
@@ -1071,6 +1264,6 @@ quantities, and `carton_qty` is the number to suggest.
 
 1. **Metafield returns nothing?** Check that storefront access is enabled on the metafield definition in Shopify admin. PromoSync may write the value, but `product.metafields.*` won't expose it to the storefront unless the definition allows it.
 2. **Use `| json` in Liquid to dump a value to HTML for inspection:** `<script>window.__ps_debug = {{ product.metafields.psrestful.location_decorations.value | json }};</script>`
-3. **Check write status via admin:** `Products → [product] → Metafields` — should show `psrestful.*` entries.
+3. **Check write status via admin:** `Products → [product] → Metafields`, should show `psrestful.*` entries.
 4. **`.value` matters for JSON metafields:** `product.metafields.psrestful.location_decorations` (raw metafield object) vs `.value` (parsed JSON). Always use `.value` to iterate.
 5. **Run `shopify theme check` after every Liquid change.**

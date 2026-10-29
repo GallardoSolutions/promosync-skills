@@ -31,7 +31,8 @@ A theme that fails the first two rows is a non-starter. The rest are things to f
 
 Shopify's own B2B features (company accounts, catalogs, quantity rules, volume pricing) need a Shopify Plus plan.
 PromoSync does **not** need them. Its tier pricing comes from `part_price_array` metafields plus the
-`quantity-price-breaks` Shopify Function, and its minimum quantity comes from `psrestful.minimum_quantity`.
+Quantity Price Breaks Shopify Function (turned on with **Enable Volume Pricing** in PromoSync), and its minimum
+quantity comes from `psrestful.minimum_quantity`.
 A distributor on a Basic, Shopify, or Advanced plan gets volume pricing through PromoSync without buying Plus.
 
 This also means a theme's **built-in** "volume pricing" or "quantity rules" UI, such as the one in Trade,
@@ -258,7 +259,7 @@ plan sizing and for understanding why a sync stopped halfway.
 | Limit | Who sets it | What PromoSync does when it hits |
 |-------|-------------|----------------------------------|
 | **Account daily quota** | The PSRESTful plan. Free 10, Standard 300, Premium 15,000, Business 50,000 calls a day, Enterprise per contract. Shared by every user, API key and PromoSync store on the account; sub-accounts draw on the parent. Resets at 00:00 UTC. | Stops the run, marks the remaining products "not attempted", and emails "Rate limit exceeded, please try again tomorrow or upgrade your PSRESTful plan". Recent Activity keeps the retry button. |
-| **Supplier throttle** | The supplier, per login. Showdown Displays allows about 40 supplier calls a minute, and one product fetch is roughly nine of them. | Waits the supplier's retry-after (capped at two minutes), up to three times, then gives up on that one product and continues. The email says the limit is on the supplier's side, not the plan. |
+| **Supplier throttle** | The supplier, per login. Some suppliers cap requests per minute, and one product fetch takes several supplier calls. | Waits the supplier's retry-after (capped at two minutes), up to three times, then gives up on that one product and continues. The email says the limit is on the supplier's side, not the plan. |
 | **Shopify API throttling** | Shopify, per store. | Retries automatically, then reports the product as failed with "Shopify API rate limit reached" or "Daily variant creation limit reached". |
 
 ### What consumes the quota
@@ -292,7 +293,7 @@ Current prices, pack sizes, and the exact rules are on the PSRESTful docs page
 - **Scheduled syncs spend calls every day.** Several PromoSync stores on one PSRESTful account share one
   allowance, so an agency running three stores on one account splits it three ways.
 - Throttled suppliers slow a run down but do not end it. A few "retry this product in a few minutes" rows
-  after a big Showdown import are normal; the retry button handles them.
+  after a big import from a throttling supplier are normal; the retry button handles them.
 
 ### What the agent should say
 
